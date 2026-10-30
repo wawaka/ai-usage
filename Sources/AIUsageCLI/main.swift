@@ -54,7 +54,7 @@ case "status":
             if let snap = s.snapshot {
                 if let b = snap.balance { print("  balance  \(b.formatted)\(b.isAvailable ? "" : " (depleted)")") }
                 for w in snap.windows + snap.extraWindows {
-                    print("  \(pad(w.label, 9)) \(bar(w.usedPercent)) \(pad(Format.percent(w.usedPercent), 5)) \(Format.reset(w.resetsAt))")
+                    print("  \(pad(w.label, 9)) \(bar(w.usedPercent)) \(pad(Format.percent(w.usedPercent), 5)) \(pad(Format.countdown(w.resetsAt), 7)) \(Format.reset(w.resetsAt))")
                 }
             }
             if let e = s.error { print("  error: \(e)") } else if let m = s.analysis?.message { print("  \(m)") }

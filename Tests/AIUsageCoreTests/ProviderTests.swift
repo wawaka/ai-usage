@@ -121,7 +121,12 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(Format.reset(now.addingTimeInterval(7200), now: now, calendar: cal), "reset 12:00")
         XCTAssertEqual(Format.reset(now.addingTimeInterval(86400 * 2), now: now, calendar: cal), "reset 11/1 10:00")
         XCTAssertEqual(Format.reset(now.addingTimeInterval(-1), now: now, calendar: cal), "reset due")
-        XCTAssertEqual(Format.countdown(now.addingTimeInterval(3 * 3600 + 720), now: now), "in 3h 12m")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(3 * 3600 + 720), now: now), "3h 12m")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(2 * 86400 + 5 * 3600 + 59 * 60), now: now), "2d 5h")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(2 * 86400 + 5 * 60), now: now), "2d 5m")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(420), now: now), "7m")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(30), now: now), "<1m")
+        XCTAssertEqual(Format.countdown(now.addingTimeInterval(-5), now: now), "now")
         XCTAssertEqual(Format.percent(0.4), "<1%")
         XCTAssertEqual(Format.planLabel("claude_max"), "Max")
     }

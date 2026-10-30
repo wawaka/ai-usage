@@ -17,15 +17,16 @@ public enum Format {
         return "reset \(time.string(from: date))"
     }
 
-    /// "in 3h 12m" / "in 2d 4h".
+    /// Time left until `date`, at most two non-zero components: "2d 5h", "2d 5m", "3h 12m", "7m".
     public static func countdown(_ date: Date?, now: Date = Date()) -> String {
         guard let date else { return "" }
         let secs = Int(date.timeIntervalSince(now))
         if secs <= 0 { return "now" }
-        let d = secs / 86400, h = (secs % 86400) / 3600, m = (secs % 3600) / 60
-        if d > 0 { return "in \(d)d \(h)h" }
-        if h > 0 { return "in \(h)h \(m)m" }
-        return "in \(max(m, 1))m"
+        let parts = [(secs / 86400, "d"), ((secs % 86400) / 3600, "h"), ((secs % 3600) / 60, "m")]
+            .filter { $0.0 > 0 }
+            .prefix(2)
+            .map { "\($0.0)\($0.1)" }
+        return parts.isEmpty ? "<1m" : parts.joined(separator: " ")
     }
 
     public static func clock(_ date: Date, calendar: Calendar = .current) -> String {

@@ -185,9 +185,9 @@ struct WindowRow: View {
             Meter(value: window.usedPercent, tint: tint)
             Text(Format.percent(window.usedPercent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(tint).frame(width: 34, alignment: .trailing)
-            Text(Format.reset(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            Text(Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .frame(width: 104, alignment: .trailing)
-                .help(Format.countdown(window.resetsAt))
+                .help(Format.reset(window.resetsAt))
         }
     }
 }
