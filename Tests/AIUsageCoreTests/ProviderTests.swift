@@ -95,24 +95,20 @@ final class ProviderTests: XCTestCase {
     func testDeepSeekBalance() throws {
         let s = try DeepSeek.parse(obj(#"{"is_available":true,"balance_infos":[{"currency":"CNY","total_balance":"71.47"}]}"#))
         XCTAssertEqual(s.balance?.formatted, "¥71.47")
-        XCTAssertEqual(BurnAnalyzer.analyze(s, samples: []).state, .balance)
+        XCTAssertEqual(UsageAnalysis.of(s).state, .balance)
     }
 
-    func testBurnAnalysis() {
-        let now = Date()
-        let snap = UsageSnapshot(windows: [
-            UsageWindow(kind: .fiveHour, usedPercent: 10, resetsAt: now.addingTimeInterval(3600)),
-            UsageWindow(kind: .sevenDay, usedPercent: 40, resetsAt: now.addingTimeInterval(3 * 86400)),
-        ])
-        XCTAssertEqual(BurnAnalyzer.analyze(snap, samples: []).state, .learning)
-        // 5h-% → 7d-% conversion of 0.1: 60% weekly left over ~14.4 slots → ~41.7% per 5h recommended.
-        let samples = (0..<11).map { UsageSample(at: now.addingTimeInterval(Double($0) * 300), five: Double($0 * 10), seven: Double($0)) }
-        XCTAssertEqual(BurnAnalyzer.conversionRate(samples)!, 0.1, accuracy: 1e-9)
-        let a = BurnAnalyzer.analyze(snap, samples: samples, now: now)
-        XCTAssertEqual(a.state, .underBurn)
-        XCTAssertEqual(a.target!.minPercent, 41.67 * 0.8, accuracy: 0.1)
-        var hot = snap; hot.windows[0].usedPercent = 95
-        XCTAssertEqual(BurnAnalyzer.analyze(hot, samples: samples).state, .limitRisk)
+    func testUsageState() {
+        func snap(_ five: Double, _ seven: Double) -> UsageSnapshot {
+            UsageSnapshot(windows: [UsageWindow(kind: .fiveHour, usedPercent: five, resetsAt: nil),
+                                    UsageWindow(kind: .sevenDay, usedPercent: seven, resetsAt: nil)])
+        }
+        XCTAssertEqual(UsageAnalysis.of(snap(10, 40)).state, .normal)
+        XCTAssertNil(UsageState.normal.badge)
+        XCTAssertEqual(UsageAnalysis.of(snap(10, 70)).state, .high)
+        XCTAssertEqual(UsageAnalysis.of(snap(95, 40)).state, .limit)
+        let empty = UsageSnapshot(windows: [], balance: Balance(total: "0", currency: "USD", isAvailable: false))
+        XCTAssertEqual(UsageAnalysis.of(empty).state, .depleted)
     }
 
     func testFormat() {

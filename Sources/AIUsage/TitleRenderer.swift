@@ -20,7 +20,7 @@ enum TitleRenderer {
         var badge: Int?
         var bars: [Double]
         var percents: [Double]
-        var state: BurnState?
+        var state: UsageState?
         var balanceText: String?
     }
 
@@ -108,11 +108,11 @@ enum TitleRenderer {
     }
 
     /// Fallback when nothing fits / nothing is configured: a gauge glyph tinted by the worst state.
-    static func iconImage(worst: BurnState?) -> NSImage {
+    static func iconImage(worst: UsageState?) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
         let base = NSImage(systemSymbolName: "gauge.with.dots.needle.67percent", accessibilityDescription: "AI Usage")?
             .withSymbolConfiguration(config) ?? NSImage()
-        guard let worst, worst != .onTrack, worst != .learning, worst != .balance else {
+        guard let worst, worst != .normal, worst != .balance else {
             base.isTemplate = true
             return base
         }

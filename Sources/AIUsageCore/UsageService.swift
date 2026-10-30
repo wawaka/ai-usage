@@ -1,20 +1,17 @@
 import Foundation
 
 /// Combines locally discovered credentials with accounts added in AI Usage, polls them and
-/// keeps per-account usage history for burn analysis.
+/// remembers the last snapshot of each account.
 public actor UsageService {
     private let secrets: SecretStore
     private let discovery: LocalDiscovery
     private let client: HTTPClient
     private let stateStore: JSONFileStore<AccountsState>
-    private let samplesStore: JSONFileStore<[String: [UsageSample]]>
     private let snapshotStore: JSONFileStore<[String: UsageSnapshot]>
 
     public private(set) var state: AccountsState
-    private var samples: [String: [UsageSample]]
     private var lastSnapshots: [String: UsageSnapshot]
     private var discovered: [String: DiscoveredCredential] = [:]
-    public var profile: BurnProfile = .low
 
     public init(secrets: SecretStore, keychain: KeychainReading? = nil, client: HTTPClient = URLSessionHTTPClient(),
                 home: URL = AppPaths.userHome, directory: URL = AppPaths.supportDirectory) {
@@ -22,14 +19,12 @@ public actor UsageService {
         self.client = client
         discovery = LocalDiscovery(home: home, keychain: keychain)
         stateStore = JSONFileStore("accounts.json", directory: directory)
-        samplesStore = JSONFileStore("samples.json", directory: directory)
         snapshotStore = JSONFileStore("snapshots.json", directory: directory)
         state = stateStore.load() ?? AccountsState()
-        samples = samplesStore.load() ?? [:]
+        // Usage history from the removed pacing feature; it is AI Usage's own file.
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("samples.json"))
         lastSnapshots = snapshotStore.load() ?? [:]
     }
-
-    public func setProfile(_ p: BurnProfile) { profile = p }
 
     // MARK: Accounts
 
@@ -92,10 +87,8 @@ public actor UsageService {
         state.managed.removeAll { $0.id == id }
         state.renamed[id] = nil
         state.hidden.remove(id)
-        samples[id] = nil
         lastSnapshots[id] = nil
         stateStore.save(state)
-        samplesStore.save(samples)
         snapshotStore.save(lastSnapshots)
     }
 
@@ -106,7 +99,7 @@ public actor UsageService {
         visibleAccounts().map { a in
             let snap = lastSnapshots[a.id]
             return AccountStatus(account: a, snapshot: snap, error: nil,
-                                 analysis: snap.map { BurnAnalyzer.analyze($0, samples: samples[a.id] ?? [], profile: profile) },
+                                 analysis: snap.map(UsageAnalysis.of),
                                  lastAttempt: snap?.observedAt ?? .distantPast)
         }
     }
@@ -121,7 +114,6 @@ public actor UsageService {
             }
             for await status in group { results[status.id] = status }
         }
-        samplesStore.save(samples)
         snapshotStore.save(lastSnapshots)
         return accounts.compactMap { results[$0.id] }
     }
@@ -134,15 +126,14 @@ public actor UsageService {
     private func refresh(_ account: Account) async -> AccountStatus {
         do {
             let snapshot = try await fetch(account)
-            record(snapshot, for: account.id)
-            return AccountStatus(account: account, snapshot: snapshot, error: nil,
-                                 analysis: BurnAnalyzer.analyze(snapshot, samples: samples[account.id] ?? [], profile: profile))
+            lastSnapshots[account.id] = snapshot
+            return AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
             // Keep showing the last good numbers, flagged with the error.
             let stale = lastSnapshots[account.id]
             return AccountStatus(account: account, snapshot: stale, error: message,
-                                 analysis: BurnAnalysis(state: .unavailable, message: message))
+                                 analysis: UsageAnalysis(state: .unavailable, message: message))
         }
     }
 
@@ -184,17 +175,5 @@ public actor UsageService {
             try secrets.save(.oauth(token), for: account.id)
             return try await UsageFetcher.fetch(account.provider, credential: .oauth(token), client: client)
         }
-    }
-
-    private func record(_ snapshot: UsageSnapshot, for id: String) {
-        lastSnapshots[id] = snapshot
-        guard let five = snapshot.fiveHour?.usedPercent, let seven = snapshot.sevenDay?.usedPercent else { return }
-        var list = samples[id] ?? []
-        if let last = list.last, last.five == five, last.seven == seven,
-           snapshot.observedAt.timeIntervalSince(last.at) < 3600 { return }
-        list.append(UsageSample(at: snapshot.observedAt, five: five, seven: seven))
-        // ~2 weeks of 5-minute samples is plenty for the conversion estimate.
-        if list.count > 4000 { list.removeFirst(list.count - 4000) }
-        samples[id] = list
     }
 }

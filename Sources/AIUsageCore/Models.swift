@@ -180,12 +180,12 @@ public struct AccountStatus: Sendable, Identifiable {
     public var account: Account
     public var snapshot: UsageSnapshot?
     public var error: String?
-    public var analysis: BurnAnalysis?
+    public var analysis: UsageAnalysis?
     public var lastAttempt: Date
 
     public var id: String { account.id }
 
-    public init(account: Account, snapshot: UsageSnapshot?, error: String?, analysis: BurnAnalysis?, lastAttempt: Date = Date()) {
+    public init(account: Account, snapshot: UsageSnapshot?, error: String?, analysis: UsageAnalysis?, lastAttempt: Date = Date()) {
         self.account = account
         self.snapshot = snapshot
         self.error = error

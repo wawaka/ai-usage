@@ -50,7 +50,7 @@ case "status":
         if statuses.isEmpty { print("No accounts found. Log in to an AI tool, or add an account in AI Usage.") }
         for s in statuses {
             let plan = Format.planLabel(s.snapshot?.plan).map { " (\($0))" } ?? ""
-            print("\n\(s.account.provider.displayName) · \(s.account.label)\(plan)  [\(s.analysis?.state.badge ?? "?")]")
+            print("\n\(s.account.provider.displayName) · \(s.account.label)\(plan)\(s.analysis?.state.badge.map { " [\($0)]" } ?? "")")
             if let snap = s.snapshot {
                 if let b = snap.balance { print("  balance  \(b.formatted)\(b.isAvailable ? "" : " (depleted)")") }
                 for w in snap.windows + snap.extraWindows {

@@ -259,14 +259,6 @@ struct SettingsView: View {
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
             Section {
-                Picker("Pacing profile", selection: $settings.profile) {
-                    Text("Low — conservative").tag(BurnProfile.low)
-                    Text("High — use more of the weekly budget").tag(BurnProfile.high)
-                }
-            } footer: {
-                Text("Colours compare your 5-hour usage with what the remaining weekly budget allows.").font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
                 Toggle("Read Claude Code login from Keychain", isOn: $settings.readClaudeKeychain)
             } footer: {
                 Text("macOS asks before AI Usage can read it. Choose “Allow” to keep the Keychain item unchanged; AI Usage never writes to it.")

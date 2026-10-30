@@ -5,10 +5,10 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
 [coding-usage-bar](https://github.com/hanzhangzzz/coding-usage-bar):
 
 - **Menu bar:** each account gets a provider mark and two stacked bars (5h on top, 7d below),
-  coloured by burn pace. Accounts are separated by thin dividers. Optionally the bars can show
+  coloured by usage: green below 70%, amber from 70%, coral at 90%+. Accounts are separated by thin dividers. Optionally the bars can show
   percentages, or be replaced by them.
-- **Dropdown card:** one section per account, with a state badge, the main percentage, 5h/7d meters
-  and reset times, a pacing hint, and the time of the last update.
+- **Dropdown card:** one section per account, with the main percentage, 5h/7d meters with time
+  left (e.g. `2d 5h`), and the time of the last update. Clicking the menu bar item refreshes.
 
 ## Accounts
 
@@ -42,8 +42,7 @@ several for the same provider:
 These secrets live in AI Usage's own Keychain items (`dev.ai-usage.accounts`), and their tokens are
 refreshed automatically.
 
-AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list, usage history for
-burn analysis, last snapshots), to its own Keychain items, and to its own preferences.
+AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list, last snapshots), to its own Keychain items, and to its own preferences.
 
 ## Behaviour
 
@@ -51,11 +50,7 @@ burn analysis, last snapshots), to its own Keychain items, and to its own prefer
   after the Mac wakes.
 - **Title width:** *Auto* measures the space right of the notch (or half the menu bar). It picks all
   accounts if they fit, then the most urgent account, then a single gauge icon.
-- **Burn pace:** this follows coding-usage-bar.
-  - History is used to learn how much weekly quota a point of 5h usage costs.
-  - That gives a recommended 5h range for the weekly budget that's left.
-  - The states are *Learning*, *Low*, *On track*, *Fast* and *Limit* (90%+).
-  - DeepSeek shows its balance instead.
+- **States:** *High* from 70%, *Limit* at 90%+. DeepSeek shows its balance instead.
 - **Notifications:** sent when an account reaches 90% or its balance runs out. This can be turned
   off.
 
@@ -89,7 +84,7 @@ app, uploads the zip as an artifact, and attaches it to `v*` tag releases.
 ## Layout
 
 ```
-Sources/AIUsageCore   providers, local discovery, OAuth, burn analysis, storage (Foundation only)
+Sources/AIUsageCore   providers, local discovery, OAuth, storage (Foundation only)
 Sources/AIUsage       menu bar app: status item renderer, dropdown, accounts/settings windows, login
 Sources/AIUsageCLI    diagnostic CLI
 Tests/                core tests incl. the read-only guarantee

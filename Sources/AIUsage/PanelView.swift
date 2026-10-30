@@ -8,7 +8,7 @@ struct PanelActions {
 }
 
 /// The dropdown card, modelled on coding-usage-bar's: one section per account with a state badge,
-/// the binding percentage, 5h/7d meters with reset times, the pacing hint and data age.
+/// the binding percentage, 5h/7d meters with time left, and data age.
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
@@ -46,11 +46,6 @@ struct PanelView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Text("AI Usage").font(.system(size: 14, weight: .bold))
-            Text(settings.profile.rawValue.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .background(Capsule().fill(Color.secondary.opacity(0.15)))
-                .foregroundStyle(.secondary)
             Spacer()
             if model.isRefreshing {
                 ProgressView().controlSize(.small)
@@ -113,7 +108,7 @@ struct MenuRow: View {
 struct AccountSection: View {
     let status: AccountStatus
 
-    private var state: BurnState? { status.analysis?.state }
+    private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
 
     var body: some View {
@@ -123,7 +118,7 @@ struct AccountSection: View {
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(spacing: 6) {
                         Text(status.account.provider.displayName).font(.system(size: 14, weight: .semibold))
-                        if let state { StateBadge(text: state.badge, color: tint) }
+                        if let badge = state?.badge { StateBadge(text: badge, color: tint) }
                         if let plan = Format.planLabel(status.snapshot?.plan) {
                             Text(plan).font(.system(size: 10)).foregroundStyle(.secondary)
                         }

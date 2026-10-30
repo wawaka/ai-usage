@@ -2,8 +2,7 @@ import AIUsageCore
 import AppKit
 import SwiftUI
 
-/// Colours follow coding-usage-bar: green when fine/learning, amber when under-using,
-/// coral when too fast or at the limit, grey for errors.
+/// Green below 70%, amber from 70%, coral at 90%+ or when depleted, grey for errors.
 enum Theme {
     static func hex(_ hex: String) -> NSColor {
         var v: UInt64 = 0
@@ -24,12 +23,12 @@ enum Theme {
     static let alert = dynamic("D97757", "E8956E")
     static let muted = dynamic("6B7280", "A1A1AA")
 
-    static func color(for state: BurnState?) -> NSColor {
+    static func color(for state: UsageState?) -> NSColor {
         switch state {
-        case .underBurn: return warning
-        case .overBurn, .limitRisk, .depleted: return alert
+        case .high: return warning
+        case .limit, .depleted: return alert
         case .unavailable, .none: return muted
-        case .learning, .onTrack, .balance: return ok
+        case .normal, .balance: return ok
         }
     }
 

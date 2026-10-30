@@ -36,7 +36,6 @@ final class AppSettings: ObservableObject {
     @Published var refreshMinutes: Int { didSet { defaults.set(refreshMinutes, forKey: "refreshMinutes") } }
     @Published var titleMode: TitleMode { didSet { defaults.set(titleMode.rawValue, forKey: "titleMode") } }
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
-    @Published var profile: BurnProfile { didSet { defaults.set(profile.rawValue, forKey: "profile") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
     @Published var notifyAtLimit: Bool { didSet { defaults.set(notifyAtLimit, forKey: "notifyAtLimit") } }
     @Published var launchAtLogin: Bool {
@@ -54,7 +53,6 @@ final class AppSettings: ObservableObject {
         refreshMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
-        profile = BurnProfile(rawValue: defaults.string(forKey: "profile") ?? "") ?? .low
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -86,13 +84,6 @@ final class AppModel: ObservableObject {
         settings.$refreshMinutes.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.scheduleTimer() }
         }.store(in: &cancellables)
-        settings.$profile.dropFirst().sink { [weak self] p in
-            Task { @MainActor in
-                guard let self else { return }
-                await self.service.setProfile(p)
-                self.refresh()
-            }
-        }.store(in: &cancellables)
         settings.$readClaudeKeychain.dropFirst().sink { [weak self] on in
             Task { @MainActor in
                 self?.keychain.enabled = on
@@ -101,7 +92,6 @@ final class AppModel: ObservableObject {
         }.store(in: &cancellables)
 
         Task {
-            await service.setProfile(settings.profile)
             statuses = await service.cachedStatuses()
             await reloadAccounts()
             refresh()
@@ -178,7 +168,7 @@ final class AppModel: ObservableObject {
         // UNUserNotificationCenter requires a real app bundle (not `swift run`).
         guard settings.notifyAtLimit, Bundle.main.bundleIdentifier != nil else { return }
         for status in result {
-            let atLimit = status.analysis?.state == .limitRisk || status.analysis?.state == .depleted
+            let atLimit = status.analysis?.state == .limit || status.analysis?.state == .depleted
             if !atLimit { alerted.remove(status.id); continue }
             guard !alerted.contains(status.id) else { continue }
             alerted.insert(status.id)
