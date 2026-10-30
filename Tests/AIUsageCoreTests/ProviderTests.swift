@@ -111,6 +111,18 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(UsageAnalysis.of(empty).state, .depleted)
     }
 
+    func testElapsedAndInvertedDisplay() {
+        let now = Date()
+        let w = UsageWindow(kind: .fiveHour, usedPercent: 30, resetsAt: now.addingTimeInterval(3600 * 4), windowMinutes: 300)
+        XCTAssertEqual(w.elapsedFraction(now: now)!, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(w.display(remaining: false, now: now).percent, 30)
+        XCTAssertEqual(w.display(remaining: true, now: now).percent, 70)
+        XCTAssertEqual(w.display(remaining: true, now: now).time!, 0.8, accuracy: 1e-9)
+        XCTAssertNil(UsageWindow(kind: .sevenDay, usedPercent: 1, resetsAt: nil).elapsedFraction())
+        let snap = UsageSnapshot(windows: [w, UsageWindow(kind: .sevenDay, usedPercent: 60, resetsAt: nil)])
+        XCTAssertEqual(Format.headlinePercent(snap, remaining: true), 40)
+    }
+
     func testFormat() {
         var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
         let now = ISO8601DateFormatter().date(from: "2026-10-30T10:00:00Z")!

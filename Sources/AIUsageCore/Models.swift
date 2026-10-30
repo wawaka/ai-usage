@@ -68,6 +68,20 @@ public struct UsageWindow: Codable, Equatable, Sendable {
         self.resetsAt = resetsAt
         self.windowMinutes = windowMinutes
     }
+
+    /// Fraction (0…1) of this window's duration that has already passed, if its length and reset are known.
+    public func elapsedFraction(now: Date = Date()) -> Double? {
+        guard let resetsAt, let minutes = windowMinutes, minutes > 0 else { return nil }
+        let left = resetsAt.timeIntervalSince(now) / (Double(minutes) * 60)
+        return min(1, max(0, 1 - left))
+    }
+
+    /// What a meter shows: used% and elapsed time, or (inverted) remaining% and time left.
+    /// Either way, a usage fill past the time fill means quota runs out before the window resets.
+    public func display(remaining: Bool, now: Date = Date()) -> (percent: Double, time: Double?) {
+        let elapsed = elapsedFraction(now: now)
+        return remaining ? (100 - usedPercent, elapsed.map { 1 - $0 }) : (usedPercent, elapsed)
+    }
 }
 
 public struct Balance: Codable, Equatable, Sendable {

@@ -36,6 +36,8 @@ final class AppSettings: ObservableObject {
     @Published var refreshMinutes: Int { didSet { defaults.set(refreshMinutes, forKey: "refreshMinutes") } }
     @Published var titleMode: TitleMode { didSet { defaults.set(titleMode.rawValue, forKey: "titleMode") } }
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
+    /// Show how much quota is left instead of how much is used.
+    @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
     @Published var notifyAtLimit: Bool { didSet { defaults.set(notifyAtLimit, forKey: "notifyAtLimit") } }
     @Published var launchAtLogin: Bool {
@@ -53,6 +55,7 @@ final class AppSettings: ObservableObject {
         refreshMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
+        showRemaining = defaults.bool(forKey: "showRemaining")
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -64,7 +67,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var statuses: [AccountStatus] = []
     @Published private(set) var accounts: [Account] = []
     @Published private(set) var hiddenIDs: Set<String> = []
-    @Published private(set) var isRefreshing = false
+    /// Accounts with a fetch in flight (each shows its own spinner).
+    @Published private(set) var refreshingIDs: Set<String> = []
     @Published private(set) var lastRefresh: Date?
 
     let settings: AppSettings
@@ -112,16 +116,33 @@ final class AppModel: ObservableObject {
         timer?.tolerance = 15
     }
 
+    /// Re-reads local credentials, then fetches every visible account; each row updates as soon as
+    /// its own request finishes. Accounts already being fetched are skipped.
     func refresh() {
-        guard !isRefreshing else { return }
-        isRefreshing = true
+        let service = self.service
         Task {
-            let result = await service.refreshAll()
-            statuses = result
-            lastRefresh = Date()
-            isRefreshing = false
+            await service.rescan()
+            let visible = await service.visibleAccounts()
+            let cached = await service.cachedStatuses()
+            // Keep current numbers (with fresh account names/order) while new ones load.
+            statuses = visible.map { account in
+                var s = statuses.first { $0.id == account.id } ?? cached.first { $0.id == account.id }
+                    ?? AccountStatus(account: account, snapshot: nil, error: nil, analysis: nil, lastAttempt: .distantPast)
+                s.account = account
+                return s
+            }
             await reloadAccounts()
-            notifyIfNeeded(result)
+            let pending = visible.filter { !refreshingIDs.contains($0.id) }
+            refreshingIDs.formUnion(pending.map(\.id))
+            for account in pending {
+                Task {
+                    let status = await service.refresh(account)
+                    refreshingIDs.remove(account.id)
+                    if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
+                    notifyIfNeeded([status])
+                    if refreshingIDs.isEmpty { lastRefresh = Date() }
+                }
+            }
         }
     }
 

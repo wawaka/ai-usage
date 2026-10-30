@@ -43,6 +43,11 @@ public enum Format {
         return snapshot.windows.map(\.usedPercent).max()
     }
 
+    /// The headline number: highest used%, or (inverted) the lowest remaining%.
+    public static func headlinePercent(_ snapshot: UsageSnapshot?, remaining: Bool) -> Double? {
+        bindingPercent(snapshot).map { remaining ? 100 - $0 : $0 }
+    }
+
     public static func planLabel(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
         return raw.replacingOccurrences(of: "claude_", with: "").replacingOccurrences(of: "_", with: " ").capitalized

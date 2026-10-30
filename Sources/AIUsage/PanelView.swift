@@ -8,7 +8,7 @@ struct PanelActions {
 }
 
 /// The dropdown card, modelled on coding-usage-bar's: one section per account with a state badge,
-/// the binding percentage, 5h/7d meters with time left, and data age.
+/// the headline percentage, 5h/7d meters (usage + elapsed time) with time left, and data age.
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
@@ -16,8 +16,6 @@ struct PanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-                .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
             if model.statuses.isEmpty {
                 emptyState.padding(16)
             } else {
@@ -37,23 +35,12 @@ struct PanelView: View {
         VStack(spacing: 0) {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
-                AccountSection(status: status)
+                AccountSection(status: status, remaining: settings.showRemaining,
+                               refreshing: model.refreshingIDs.contains(status.id))
                     .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text("AI Usage").font(.system(size: 14, weight: .bold))
-            Spacer()
-            if model.isRefreshing {
-                ProgressView().controlSize(.small)
-            } else if let last = model.lastRefresh {
-                Text(last, format: .dateTime.month(.defaultDigits).day().hour().minute())
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-        }
+        .padding(.vertical, 4)
     }
 
     private var emptyState: some View {
@@ -70,6 +57,8 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             MenuRow(title: "Refresh now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
+            MenuRow(title: settings.showRemaining ? "Show used" : "Show remaining", shortcut: "I") { settings.showRemaining.toggle() }
+                .keyboardShortcut("i")
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)
             MenuRow(title: "Settings…", shortcut: ",", action: actions.openSettings)
                 .keyboardShortcut(",")
@@ -107,6 +96,8 @@ struct MenuRow: View {
 
 struct AccountSection: View {
     let status: AccountStatus
+    let remaining: Bool
+    let refreshing: Bool
 
     private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
@@ -126,11 +117,12 @@ struct AccountSection: View {
                     Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
+                if refreshing { ProgressView().controlSize(.small) }
                 headline
             }
             if let snap = status.snapshot {
                 ForEach(Array((snap.windows + snap.extraWindows).enumerated()), id: \.offset) { _, w in
-                    WindowRow(window: w, tint: tint)
+                    WindowRow(window: w, tint: tint, remaining: remaining)
                 }
             }
             HStack(alignment: .firstTextBaseline) {
@@ -150,8 +142,11 @@ struct AccountSection: View {
     @ViewBuilder private var headline: some View {
         if let balance = status.snapshot?.balance {
             Text(balance.formatted).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(tint)
-        } else if let pct = Format.bindingPercent(status.snapshot) {
-            Text(Format.percent(pct)).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(tint)
+        } else if let pct = Format.headlinePercent(status.snapshot, remaining: remaining) {
+            VStack(alignment: .trailing, spacing: -2) {
+                Text(Format.percent(pct)).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(tint)
+                Text(remaining ? "left" : "used").font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
         }
     }
 }
@@ -172,31 +167,51 @@ struct StateBadge: View {
 struct WindowRow: View {
     let window: UsageWindow
     let tint: Color
+    let remaining: Bool
 
     var body: some View {
+        let shown = window.display(remaining: remaining)
         HStack(spacing: 8) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .frame(width: 58, alignment: .leading)
-            Meter(value: window.usedPercent, tint: tint)
-            Text(Format.percent(window.usedPercent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
+            Meter(value: shown.percent, time: shown.time, tint: tint)
+                .help(timeHelp(shown.time))
+            Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(tint).frame(width: 34, alignment: .trailing)
             Text(Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .frame(width: 104, alignment: .trailing)
                 .help(Format.reset(window.resetsAt))
         }
     }
+
+    private func timeHelp(_ time: Double?) -> String {
+        guard let time else { return "" }
+        return "\(Int((time * 100).rounded()))% of the window's time \(remaining ? "left" : "elapsed")"
+    }
 }
 
+/// Usage bar with the window's time drawn behind it in a lighter shade of the same colour:
+/// usage reaching past the time shade means quota is being used faster than the window elapses.
 struct Meter: View {
     let value: Double
+    var time: Double?
     let tint: Color
 
     var body: some View {
         GeometryReader { geo in
+            let w = geo.size.width
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.25))
+                Capsule().fill(Color.secondary.opacity(0.22))
+                if let time, time > 0 {
+                    Capsule().fill(tint.opacity(0.32)).frame(width: max(6, w * min(time, 1)))
+                }
                 if value > 0 {
-                    Capsule().fill(tint).frame(width: max(6, geo.size.width * min(value, 100) / 100))
+                    Capsule().fill(tint).frame(width: max(6, w * min(value, 100) / 100))
+                }
+                // Keep the time position visible when usage covers it.
+                if let time, time > 0, time < 1, value / 100 > time {
+                    Rectangle().fill(Color.primary.opacity(0.55)).frame(width: 1.5)
+                        .offset(x: w * time - 0.75)
                 }
             }
         }

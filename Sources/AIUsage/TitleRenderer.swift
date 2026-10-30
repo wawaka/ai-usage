@@ -15,16 +15,22 @@ enum TitleRenderer {
     static let barRadius: CGFloat = 2
     static let percentFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
 
+    struct Bar {
+        var percent: Double
+        /// Fraction of the window's time elapsed (or left, when showing remaining); drawn as a lighter shade.
+        var time: Double?
+    }
+
     struct Segment {
         var provider: ProviderKind
         var badge: Int?
-        var bars: [Double]
+        var bars: [Bar]
         var percents: [Double]
         var state: UsageState?
         var balanceText: String?
     }
 
-    static func segments(for statuses: [AccountStatus]) -> [Segment] {
+    static func segments(for statuses: [AccountStatus], remaining: Bool) -> [Segment] {
         let counts = Dictionary(grouping: statuses, by: \.account.provider).mapValues(\.count)
         var seen: [ProviderKind: Int] = [:]
         return statuses.map { s in
@@ -32,14 +38,18 @@ enum TitleRenderer {
             seen[p, default: 0] += 1
             let windows = s.snapshot?.windows ?? []
             let five = windows.first { $0.kind == .fiveHour }, seven = windows.first { $0.kind == .sevenDay }
-            var bars = [five, seven].compactMap { $0?.usedPercent }
-            if bars.isEmpty { bars = windows.prefix(2).map(\.usedPercent) }
+            var shown = [five, seven].compactMap { $0 }
+            if shown.isEmpty { shown = Array(windows.prefix(2)) }
+            var bars = shown.map { w -> Bar in
+                let d = w.display(remaining: remaining)
+                return Bar(percent: d.percent, time: d.time)
+            }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
-            if bars.isEmpty, let balance { bars = [balance.isAvailable ? 100 : 0] }
-            if bars.isEmpty { bars = [0] }
+            if bars.isEmpty, let balance { bars = [Bar(percent: balance.isAvailable ? 100 : 0)] }
+            if bars.isEmpty { bars = [Bar(percent: 0)] }
             return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
-                           percents: [five, seven].compactMap { $0?.usedPercent },
+                           percents: [five, seven].compactMap { $0?.display(remaining: remaining).percent },
                            state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
                            balanceText: balance?.formatted)
         }
@@ -81,13 +91,19 @@ enum TitleRenderer {
                     x += iconBarGap
                     let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
                     var y = floor((height + totalH) / 2) - barHeight
-                    for pct in seg.bars {
-                        barBg.setFill()
-                        NSBezierPath(roundedRect: NSRect(x: x, y: y, width: barWidth, height: barHeight), xRadius: barRadius, yRadius: barRadius).fill()
-                        if pct > 0 {
-                            let w = max(barRadius * 2, (barWidth * min(pct, 100) / 100).rounded())
-                            fill.setFill()
-                            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: barHeight), xRadius: barRadius, yRadius: barRadius).fill()
+                    for bar in seg.bars {
+                        func capsule(_ width: CGFloat, _ color: NSColor) {
+                            color.setFill()
+                            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: max(barRadius * 2, width.rounded()), height: barHeight),
+                                         xRadius: barRadius, yRadius: barRadius).fill()
+                        }
+                        capsule(barWidth, barBg)
+                        // Window time first, in a lighter shade; usage on top. Usage past the shade = ahead of pace.
+                        if let time = bar.time, time > 0 { capsule(barWidth * min(time, 1), fill.withAlphaComponent(0.38)) }
+                        if bar.percent > 0 { capsule(barWidth * min(bar.percent, 100) / 100, fill) }
+                        if let time = bar.time, time > 0, time < 1, bar.percent / 100 > time {
+                            (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.7).setFill()
+                            NSRect(x: x + (barWidth * time).rounded() - 0.5, y: y, width: 1, height: barHeight).fill()
                         }
                         y -= barHeight + barGap
                     }

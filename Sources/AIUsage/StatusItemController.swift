@@ -31,7 +31,7 @@ final class StatusItemController: NSObject {
             }
         }
 
-        model.$statuses.combineLatest(settings.$titleMode, settings.$titleStyle)
+        model.$statuses.combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
             .store(in: &cancellables)
@@ -46,7 +46,8 @@ final class StatusItemController: NSObject {
         let statuses = model.statuses
         let style = settings.titleStyle
         var mode = settings.titleMode
-        let all = TitleRenderer.segments(for: statuses)
+        let remaining = settings.showRemaining
+        let all = TitleRenderer.segments(for: statuses, remaining: remaining)
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
@@ -60,7 +61,7 @@ final class StatusItemController: NSObject {
             image = TitleRenderer.image(for: all, style: style)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent]), style: style)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining), style: style)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }
@@ -68,13 +69,15 @@ final class StatusItemController: NSObject {
             image = TitleRenderer.iconImage(worst: TitleRenderer.mostUrgent(statuses)?.analysis?.state)
         }
         button.image = image
-        button.toolTip = tooltip(statuses)
+        button.toolTip = tooltip(statuses, remaining: remaining)
     }
 
-    private func tooltip(_ statuses: [AccountStatus]) -> String {
+    private func tooltip(_ statuses: [AccountStatus], remaining: Bool) -> String {
         guard !statuses.isEmpty else { return "AI Usage — no accounts yet" }
         return statuses.map { s in
-            let windows = (s.snapshot?.windows ?? []).map { "\($0.label) \(Format.percent($0.usedPercent))" }.joined(separator: ", ")
+            let windows = (s.snapshot?.windows ?? []).map {
+                "\($0.label) \(Format.percent($0.display(remaining: remaining).percent))\(remaining ? " left" : "")"
+            }.joined(separator: ", ")
             let value = s.snapshot?.balance?.formatted ?? windows
             return "\(s.account.provider.displayName) · \(s.account.label): \(s.error == nil ? value : "error")"
         }.joined(separator: "\n")

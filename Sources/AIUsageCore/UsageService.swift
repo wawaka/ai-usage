@@ -123,10 +123,12 @@ public actor UsageService {
         return secrets.load(account.id).map { ($0, nil) }
     }
 
-    private func refresh(_ account: Account) async -> AccountStatus {
+    /// Fetches one account (used by the app to update accounts individually as they finish).
+    public func refresh(_ account: Account) async -> AccountStatus {
         do {
             let snapshot = try await fetch(account)
             lastSnapshots[account.id] = snapshot
+            snapshotStore.save(lastSnapshots)
             return AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
         } catch {
             let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription

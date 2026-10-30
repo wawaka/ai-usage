@@ -255,6 +255,7 @@ struct SettingsView: View {
                 Picker("Refresh every", selection: $settings.refreshMinutes) {
                     ForEach([1, 2, 5, 10, 15, 30], id: \.self) { Text("\($0) min").tag($0) }
                 }
+                Toggle("Show remaining quota instead of used", isOn: $settings.showRemaining)
                 Toggle("Notify when an account nears its limit", isOn: $settings.notifyAtLimit)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
