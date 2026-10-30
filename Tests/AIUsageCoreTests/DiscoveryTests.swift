@@ -31,6 +31,15 @@ func makeJWT(_ claims: [String: Any]) -> String {
     return "eyJhbGciOiJub25lIn0.\(payload).sig"
 }
 
+/// Counts secret reads like a Keychain would (each read = one potential access prompt).
+final class CountingKeychain: KeychainReading, @unchecked Sendable {
+    var blob: Data
+    var reads = 0
+    init(_ blob: Data) { self.blob = blob }
+    func items(servicePrefix: String) -> [(service: String, account: String)] { [("Claude Code-credentials", "me")] }
+    func data(service: String, account: String) -> Data? { reads += 1; return blob }
+}
+
 final class DiscoveryTests: XCTestCase {
     var home: URL!
     var appDir: URL!
@@ -168,5 +177,20 @@ final class DiscoveryTests: XCTestCase {
         let reloaded = UsageService(secrets: secrets, client: http, home: home, directory: appDir)
         let reloadedIDs = await reloaded.allAccounts().map(\.id)
         XCTAssertEqual(reloadedIDs, [a.id])
+    }
+
+    func testExpiredKeychainTokenIsReReadOnlyOnce() async throws {
+        let expired = #"{"claudeAiOauth":{"accessToken":"old","refreshToken":"r","expiresAt":1000}}"#
+        let keychain = CountingKeychain(Data(expired.utf8))
+        let http = MockHTTP { _ in (500, "must not be called for an expired token") }
+        let service = UsageService(secrets: MemorySecrets(), keychain: keychain, client: http, home: home, directory: appDir)
+        for _ in 0..<3 { _ = await service.refreshAll() }
+        // 1 read per scan (3 scans, uncached in this fake) + exactly 1 extra re-read for the expired token.
+        XCTAssertEqual(keychain.reads, 4)
+        // Survives a relaunch.
+        let relaunched = UsageService(secrets: MemorySecrets(), keychain: keychain, client: http, home: home, directory: appDir)
+        _ = await relaunched.refreshAll()
+        XCTAssertEqual(keychain.reads, 5)
+        XCTAssertTrue(http.requests.isEmpty)
     }
 }

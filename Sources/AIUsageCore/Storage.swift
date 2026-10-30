@@ -106,6 +106,17 @@ public struct AccountsState: Codable, Sendable {
     public var renamed: [String: String] = [:]
     /// Display order (account IDs); unknown accounts go last.
     public var order: [String] = []
+    /// SHA-256 prefixes of expired borrowed tokens already re-read once from the Keychain.
+    public var recheckedExpiredTokens: Set<String> = []
 
     public init() {}
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        managed = try c.decodeIfPresent([Account].self, forKey: .managed) ?? []
+        hidden = try c.decodeIfPresent(Set<String>.self, forKey: .hidden) ?? []
+        renamed = try c.decodeIfPresent([String: String].self, forKey: .renamed) ?? [:]
+        order = try c.decodeIfPresent([String].self, forKey: .order) ?? []
+        recheckedExpiredTokens = try c.decodeIfPresent(Set<String>.self, forKey: .recheckedExpiredTokens) ?? []
+    }
 }

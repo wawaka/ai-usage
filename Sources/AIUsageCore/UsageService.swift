@@ -13,6 +13,10 @@ public actor UsageService {
     private var lastSnapshots: [String: UsageSnapshot]
     private var discovered: [String: DiscoveredCredential] = [:]
 
+    static func fingerprint(_ token: String) -> String {
+        SHA256.hash(Data(token.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+    }
+
     public init(secrets: SecretStore, keychain: KeychainReading? = nil, client: HTTPClient = URLSessionHTTPClient(),
                 home: URL = AppPaths.userHome, directory: URL = AppPaths.supportDirectory) {
         self.secrets = secrets
@@ -146,7 +150,12 @@ public actor UsageService {
         // Claude Code rotates its Keychain token; re-read it only once our cached copy has expired,
         // so macOS asks for Keychain access rarely instead of on every poll.
         let keychainPrefix = "local:claude-code:keychain:"
-        if case .oauth(let t) = credential, t.isExpired(), account.id.hasPrefix(keychainPrefix) {
+        // An expired token is re-read only once (persisted as a hash): if the owning tool isn't running,
+        // its item holds the same expired token, and asking again would only repeat the prompt.
+        if case .oauth(let t) = credential, t.isExpired(), account.id.hasPrefix(keychainPrefix),
+           state.recheckedExpiredTokens.insert(Self.fingerprint(t.accessToken)).inserted {
+            if state.recheckedExpiredTokens.count > 50 { state.recheckedExpiredTokens = [Self.fingerprint(t.accessToken)] }
+            stateStore.save(state)
             discovery.keychain?.invalidate(service: String(account.id.dropFirst(keychainPrefix.count)))
             rescan()
             if let fresh = self.credential(for: account) { (credential, tool) = fresh }
