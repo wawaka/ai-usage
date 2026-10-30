@@ -1,0 +1,265 @@
+import AIUsageCore
+import SwiftUI
+
+struct AccountsView: View {
+    @ObservedObject var model: AppModel
+    @State private var adding: ProviderKind?
+    @State private var renaming: Account?
+    @State private var newName = ""
+
+    private var local: [Account] { model.accounts.filter(\.isLocal) }
+    private var managed: [Account] { model.accounts.filter { !$0.isLocal } }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            List {
+                Section {
+                    if local.isEmpty {
+                        Text("Nothing found. AI Usage reads Claude Code, Codex CLI, OpenCode, Pi and claude-lanes credentials, plus GLM/Kimi/MiniMax keys configured in Claude Code settings.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(local) { row($0) }
+                } header: {
+                    Text("Found on this Mac (read-only)")
+                } footer: {
+                    Text("These are only read, never changed. Tokens are not refreshed by AI Usage; if one expires, open the tool that owns it.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Section("Added in AI Usage") {
+                    if managed.isEmpty {
+                        Text("Sign in to more accounts, including several of the same provider.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    ForEach(managed) { row($0) }
+                }
+            }
+            Divider()
+            HStack {
+                Menu("Add Account") {
+                    ForEach(ProviderKind.allCases) { p in
+                        Button(p.usesOAuth ? "\(p.displayName) — sign in with browser…" : "\(p.displayName) — API key…") { adding = p }
+                    }
+                }
+                .fixedSize()
+                Spacer()
+                Button("Rescan") { model.refresh() }
+            }
+            .padding(12)
+        }
+        .frame(minWidth: 560, minHeight: 420)
+        .sheet(item: $adding) { provider in
+            if provider.usesOAuth, let login = LoginController(provider: provider, model: model) {
+                OAuthLoginSheet(login: login) { adding = nil }
+            } else {
+                APIKeySheet(provider: provider, model: model) { adding = nil }
+            }
+        }
+        .alert("Rename account", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Name", text: $newName)
+            Button("Save") { if let a = renaming { model.rename(a, to: newName) }; renaming = nil }
+            Button("Cancel", role: .cancel) { renaming = nil }
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ account: Account) -> some View {
+        HStack(spacing: 10) {
+            ProviderMark(provider: account.provider, size: 22)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(account.label).font(.body)
+                Text(account.sourceDescription).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            Spacer()
+            Toggle("Show", isOn: Binding(get: { !model.hiddenIDs.contains(account.id) },
+                                         set: { model.setHidden(account, !$0) }))
+                .toggleStyle(.switch).controlSize(.small).labelsHidden()
+                .help("Show in menu bar")
+            Menu {
+                Button("Rename…") { newName = account.label; renaming = account }
+                if !account.isLocal {
+                    Button("Remove", role: .destructive) { model.remove(account) }
+                }
+            } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).fixedSize()
+        }
+        .padding(.vertical, 2)
+    }
+}
+
+struct OAuthLoginSheet: View {
+    @StateObject var login: LoginController
+    let close: () -> Void
+    @State private var pasted = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ProviderMark(provider: login.provider, size: 24)
+                Text("Sign in to \(login.provider.displayName)").font(.title3.bold())
+            }
+            switch login.phase {
+            case .idle:
+                Text("Your browser will open the \(login.provider.displayName) sign-in page. The account you choose is added to AI Usage only; other apps' logins are not touched.")
+                    .fixedSize(horizontal: false, vertical: true)
+                if login.provider == .claude {
+                    Text("To add another account, switch accounts on claude.ai in the browser first.").font(.caption).foregroundStyle(.secondary)
+                }
+            case .waiting(let url, _, let manual):
+                Text(manual
+                     ? "Authorize in the browser, then paste the code shown on the page."
+                     : "Waiting for the browser… If the browser is on another device or the page fails to load, paste the final URL from its address bar.")
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    TextField(manual ? "Paste code" : "Paste redirect URL (optional)", text: $pasted)
+                        .textFieldStyle(.roundedBorder)
+                    Button("Submit") { login.submitPasted(pasted) }.disabled(pasted.isEmpty)
+                }
+                HStack {
+                    Button("Copy sign-in link") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                    }
+                    if !manual && login.supportsManualCode {
+                        Button("Use a code instead") { login.start(manual: true) }
+                    }
+                    if !manual { ProgressView().controlSize(.small) }
+                }
+            case .exchanging:
+                HStack { ProgressView().controlSize(.small); Text("Finishing sign-in…") }
+            case .done(let label):
+                Label("Added \(label)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+            case .failed(let message):
+                Text(message).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                switch login.phase {
+                case .done:
+                    Button("Done") { close() }.keyboardShortcut(.defaultAction)
+                case .idle, .failed:
+                    Button("Cancel") { login.cancel(); close() }
+                    Button(login.phase == .idle ? "Open Browser" : "Try Again") { login.start() }.keyboardShortcut(.defaultAction)
+                default:
+                    Button("Cancel") { login.cancel(); close() }
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+}
+
+struct APIKeySheet: View {
+    let provider: ProviderKind
+    @ObservedObject var model: AppModel
+    let close: () -> Void
+    @State private var name = ""
+    @State private var key = ""
+    @State private var region = "default"
+    @State private var error: String?
+    @State private var saving = false
+
+    private var regions: [(String, String)] {
+        switch provider {
+        case .glm: return [("default", "open.bigmodel.cn (China)"), ("intl", "api.z.ai (International)")]
+        case .minimax: return [("default", "api.minimaxi.com (China)"), ("intl", "api.minimax.io (International)")]
+        default: return []
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ProviderMark(provider: provider, size: 24)
+                Text("Add \(provider.displayName) API key").font(.title3.bold())
+            }
+            Form {
+                TextField("Name", text: $name, prompt: Text("\(provider.displayName) account"))
+                SecureField("API key", text: $key)
+                if !regions.isEmpty {
+                    Picker("Endpoint", selection: $region) {
+                        ForEach(regions, id: \.0) { Text($0.1).tag($0.0) }
+                    }
+                }
+            }
+            Text(provider == .deepseek ? "DeepSeek reports account balance, not usage windows." : "Usage is read from the provider's quota API with this key. The key is stored in your login Keychain.")
+                .font(.caption).foregroundStyle(.secondary)
+            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            HStack {
+                Spacer()
+                Button("Cancel", action: close)
+                Button("Add") { Task { await save() } }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+            }
+        }
+        .padding(20)
+        .frame(width: 460)
+    }
+
+    private func save() async {
+        saving = true
+        defer { saving = false }
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        var cred = APIKeyCredential(key: trimmed)
+        switch provider {
+        case .glm: cred.baseURL = region == "intl" ? GLM.internationalBaseURL : GLM.defaultBaseURL
+        case .minimax: cred.region = region == "intl" ? "global" : "cn"
+        default: break
+        }
+        // Validate before saving so typos surface immediately.
+        do {
+            _ = try await UsageFetcher.fetch(provider, credential: .apiKey(cred), client: URLSessionHTTPClient())
+        } catch {
+            self.error = "Check failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+            return
+        }
+        do {
+            try await model.addManaged(provider: provider, label: name.isEmpty ? "\(provider.displayName) account" : name, credential: .apiKey(cred))
+            close()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+}
+
+struct SettingsView: View {
+    @ObservedObject var settings: AppSettings
+
+    var body: some View {
+        Form {
+            Section("Menu bar") {
+                Picker("Show", selection: $settings.titleMode) {
+                    ForEach(TitleMode.allCases) { Text($0.label).tag($0) }
+                }
+                Picker("Style", selection: $settings.titleStyle) {
+                    ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
+                }
+            }
+            Section("Updates") {
+                Picker("Refresh every", selection: $settings.refreshMinutes) {
+                    ForEach([1, 2, 5, 10, 15, 30], id: \.self) { Text("\($0) min").tag($0) }
+                }
+                Toggle("Notify when an account nears its limit", isOn: $settings.notifyAtLimit)
+                Toggle("Launch at login", isOn: $settings.launchAtLogin)
+            }
+            Section {
+                Picker("Pacing profile", selection: $settings.profile) {
+                    Text("Low — conservative").tag(BurnProfile.low)
+                    Text("High — use more of the weekly budget").tag(BurnProfile.high)
+                }
+            } footer: {
+                Text("Colours compare your 5-hour usage with what the remaining weekly budget allows.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Read Claude Code login from Keychain", isOn: $settings.readClaudeKeychain)
+            } footer: {
+                Text("macOS asks before AI Usage can read it. Choose “Allow” to keep the Keychain item unchanged; AI Usage never writes to it.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}

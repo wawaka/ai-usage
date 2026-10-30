@@ -1,0 +1,15 @@
+[project]
+name = "agent-quota-monitor"
+version = "0.1.0"
+description = "POC CLI showing Claude and Codex subscription quotas (5h / 1w)"
+requires-python = ">=3.10"
+
+[project.scripts]
+aqm = "aqm:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["aqm"]

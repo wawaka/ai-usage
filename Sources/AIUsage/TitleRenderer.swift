@@ -1,0 +1,145 @@
+import AIUsageCore
+import AppKit
+
+/// Draws the menu bar title: one segment per account (mark + stacked 5h/7d bars), separated by
+/// thin dividers — the coding-usage-bar look, drawn natively and re-resolved for light/dark.
+enum TitleRenderer {
+    // Geometry from coding-usage-bar's title payload.
+    static let height: CGFloat = 22
+    static let iconSize: CGFloat = 16
+    static let iconBarGap: CGFloat = 4
+    static let segmentGap: CGFloat = 8
+    static let barWidth: CGFloat = 48
+    static let barHeight: CGFloat = 4
+    static let barGap: CGFloat = 3
+    static let barRadius: CGFloat = 2
+    static let percentFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+
+    struct Segment {
+        var provider: ProviderKind
+        var badge: Int?
+        var bars: [Double]
+        var percents: [Double]
+        var state: BurnState?
+        var balanceText: String?
+    }
+
+    static func segments(for statuses: [AccountStatus]) -> [Segment] {
+        let counts = Dictionary(grouping: statuses, by: \.account.provider).mapValues(\.count)
+        var seen: [ProviderKind: Int] = [:]
+        return statuses.map { s in
+            let p = s.account.provider
+            seen[p, default: 0] += 1
+            let windows = s.snapshot?.windows ?? []
+            let five = windows.first { $0.kind == .fiveHour }, seven = windows.first { $0.kind == .sevenDay }
+            var bars = [five, seven].compactMap { $0?.usedPercent }
+            if bars.isEmpty { bars = windows.prefix(2).map(\.usedPercent) }
+            let balance = s.snapshot?.balance
+            // Balance-only providers get one full bar, like the reference (green when available).
+            if bars.isEmpty, let balance { bars = [balance.isAvailable ? 100 : 0] }
+            if bars.isEmpty { bars = [0] }
+            return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
+                           percents: [five, seven].compactMap { $0?.usedPercent },
+                           state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
+                           balanceText: balance?.formatted)
+        }
+    }
+
+    static func text(for seg: Segment) -> String? {
+        if !seg.percents.isEmpty { return seg.percents.map(Format.percent).joined(separator: "·") }
+        return seg.balanceText
+    }
+
+    static func width(of seg: Segment, style: TitleStyle) -> CGFloat {
+        var w = iconSize
+        if style != .percent { w += iconBarGap + barWidth }
+        if style != .bars, let t = text(for: seg) {
+            w += iconBarGap + ceil(NSAttributedString(string: t, attributes: [.font: percentFont]).size().width)
+        }
+        return w
+    }
+
+    static func image(for segs: [Segment], style: TitleStyle) -> NSImage {
+        let widths = segs.map { width(of: $0, style: style) }
+        let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * (segmentGap * 2 + 1)
+        let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
+            let dark = Theme.isDark(nil)
+            let barBg = (dark ? NSColor.white : NSColor.black).withAlphaComponent(dark ? 0.25 : 0.3)
+            let divider = (dark ? NSColor.white : NSColor.black).withAlphaComponent(dark ? 0.3 : 0.25)
+            var x: CGFloat = 0
+            for (i, seg) in segs.enumerated() {
+                if i > 0 {
+                    x += segmentGap
+                    divider.setFill()
+                    NSRect(x: x, y: floor(height * 0.2), width: 1, height: floor(height * 0.6)).fill()
+                    x += 1 + segmentGap
+                }
+                Theme.drawMark(seg.provider, in: NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize), badge: seg.badge)
+                x += iconSize
+                let fill = Theme.color(for: seg.state)
+                if style != .percent {
+                    x += iconBarGap
+                    let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
+                    var y = floor((height + totalH) / 2) - barHeight
+                    for pct in seg.bars {
+                        barBg.setFill()
+                        NSBezierPath(roundedRect: NSRect(x: x, y: y, width: barWidth, height: barHeight), xRadius: barRadius, yRadius: barRadius).fill()
+                        if pct > 0 {
+                            let w = max(barRadius * 2, (barWidth * min(pct, 100) / 100).rounded())
+                            fill.setFill()
+                            NSBezierPath(roundedRect: NSRect(x: x, y: y, width: w, height: barHeight), xRadius: barRadius, yRadius: barRadius).fill()
+                        }
+                        y -= barHeight + barGap
+                    }
+                    x += barWidth
+                }
+                if style != .bars, let t = text(for: seg) {
+                    x += iconBarGap
+                    let s = NSAttributedString(string: t, attributes: [.font: percentFont, .foregroundColor: style == .percent ? NSColor.labelColor : fill])
+                    let size = s.size()
+                    s.draw(at: NSPoint(x: x, y: (height - size.height) / 2))
+                    x += ceil(size.width)
+                }
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// Fallback when nothing fits / nothing is configured: a gauge glyph tinted by the worst state.
+    static func iconImage(worst: BurnState?) -> NSImage {
+        let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let base = NSImage(systemSymbolName: "gauge.with.dots.needle.67percent", accessibilityDescription: "AI Usage")?
+            .withSymbolConfiguration(config) ?? NSImage()
+        guard let worst, worst != .onTrack, worst != .learning, worst != .balance else {
+            base.isTemplate = true
+            return base
+        }
+        let tinted = NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            Theme.color(for: worst).set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.isTemplate = false
+        return tinted
+    }
+
+    /// Most urgent account: worst state, then highest usage.
+    static func mostUrgent(_ statuses: [AccountStatus]) -> AccountStatus? {
+        statuses.min { a, b in
+            let pa = a.analysis?.state.priority ?? 9, pb = b.analysis?.state.priority ?? 9
+            if pa != pb { return pa < pb }
+            return (Format.bindingPercent(a.snapshot) ?? 0) > (Format.bindingPercent(b.snapshot) ?? 0)
+        }
+    }
+
+    /// Room available for our item: right of the notch on notched displays, else half the bar,
+    /// minus what the system's own items (clock, Control Center…) typically take.
+    static func menuBarBudget() -> CGFloat {
+        guard let screen = NSScreen.main else { return 400 }
+        let right = screen.auxiliaryTopRightArea?.width ?? screen.frame.width / 2
+        return right - 240
+    }
+}

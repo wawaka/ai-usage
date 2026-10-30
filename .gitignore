@@ -1,0 +1,7 @@
+__pycache__/
+*.egg-info/
+.build/
+build/
+dist/
+*.xcodeproj/xcuserdata/
+.swiftpm/
