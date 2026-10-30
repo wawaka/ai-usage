@@ -67,6 +67,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var statuses: [AccountStatus] = []
     @Published private(set) var accounts: [Account] = []
     @Published private(set) var hiddenIDs: Set<String> = []
+    /// Keychain items whose access prompt was denied (not asked again until retried).
+    @Published private(set) var deniedKeychainItems: Set<String> = []
     /// Accounts with a fetch in flight (each shows its own spinner).
     @Published private(set) var refreshingIDs: Set<String> = []
     @Published private(set) var lastRefresh: Date?
@@ -90,6 +92,8 @@ final class AppModel: ObservableObject {
         }.store(in: &cancellables)
         settings.$readClaudeKeychain.dropFirst().sink { [weak self] on in
             Task { @MainActor in
+                // Turning the option back on is an explicit request to be asked again.
+                if on { self?.keychain.resetDenials() }
                 self?.keychain.enabled = on
                 self?.refresh()
             }
@@ -149,6 +153,13 @@ final class AppModel: ObservableObject {
     func reloadAccounts() async {
         accounts = await service.allAccounts()
         hiddenIDs = await service.state.hidden
+        deniedKeychainItems = keychain.deniedServices
+    }
+
+    func retryKeychainAccess() {
+        keychain.resetDenials()
+        deniedKeychainItems = []
+        refresh()
     }
 
     func setHidden(_ account: Account, _ hidden: Bool) {

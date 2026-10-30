@@ -34,7 +34,10 @@ These sources are **strictly read-only**:
 - Tokens are **never refreshed**, because refreshing would rotate the owning tool's refresh token
   and log it out. When a borrowed token expires, the card says so; open the owning tool to renew it.
 - Reading Claude Code's Keychain item makes macOS ask for access. Choose **Allow**:
-  **Always Allow** would change that item's access list. You can turn this source off in Settings.
+  **Always Allow** would change that item's access list. AI Usage then keeps a copy of the token in
+  its own Keychain item (`dev.ai-usage.borrowed`), so it asks again only when that token expires.
+  If you deny, it remembers and won't ask again until you re-enable the source in Settings or
+  press *Try again* in Accounts.
 - A test checks that a full discovery and poll leaves every file under `$HOME` byte-for-byte
   unchanged.
 

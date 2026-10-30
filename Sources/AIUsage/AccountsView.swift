@@ -32,6 +32,17 @@ struct AccountsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if !model.deniedKeychainItems.isEmpty {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.fill").foregroundStyle(.secondary)
+                    Text("Keychain access to \(model.deniedKeychainItems.sorted().joined(separator: ", ")) was denied, so AI Usage won't ask again.")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Try again") { model.retryKeychainAccess() }
+                }
+                .padding(12)
+                Divider()
+            }
             List {
                 Section {
                     if local.isEmpty {
@@ -262,7 +273,7 @@ struct SettingsView: View {
             Section {
                 Toggle("Read Claude Code login from Keychain", isOn: $settings.readClaudeKeychain)
             } footer: {
-                Text("macOS asks before AI Usage can read it. Choose “Allow” to keep the Keychain item unchanged; AI Usage never writes to it.")
+                Text("macOS asks once before AI Usage can read it; AI Usage then keeps a copy in its own Keychain item and asks again only when that token expires. Choose “Allow” to keep Claude Code's item unchanged. If you deny, it won't ask again until you turn this back on.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
