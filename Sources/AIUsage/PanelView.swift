@@ -89,7 +89,8 @@ struct MenuRow: View {
     let shortcut: String?
     var secondary = false
     let action: () -> Void
-    @State private var hovering = false
+    @StateObject private var hover = Flag()
+    private var hovering: Bool { hover.value }
 
     var body: some View {
         Button(action: action) {
@@ -105,7 +106,7 @@ struct MenuRow: View {
             .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Color.accentColor : .clear))
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
+        .onHover { hover.value = $0 }
     }
 }
 

@@ -44,9 +44,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-// Menu bar only: no Dock icon (also set via LSUIElement in Info.plist).
-app.setActivationPolicy(.accessory)
-app.run()
+// Top-level code is not main-actor isolated, but it does run on the main thread.
+MainActor.assumeIsolated {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    // Menu bar only: no Dock icon (also set via LSUIElement in Info.plist).
+    app.setActivationPolicy(.accessory)
+    app.run()
+}

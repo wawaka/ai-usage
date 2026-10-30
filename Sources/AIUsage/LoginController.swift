@@ -95,6 +95,7 @@ final class LoginController: ObservableObject {
     }
 
     @Published var phase: Phase = .idle
+    @Published var pasted = ""
     let provider: ProviderKind
     private let model: AppModel
     private let oauth: OAuthProvider

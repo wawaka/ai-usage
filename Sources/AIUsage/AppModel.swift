@@ -2,7 +2,7 @@ import AIUsageCore
 import AppKit
 import Combine
 import ServiceManagement
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum TitleMode: String, CaseIterable, Identifiable {
     case auto, full, single, icon

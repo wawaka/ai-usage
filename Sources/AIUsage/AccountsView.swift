@@ -1,11 +1,31 @@
 import AIUsageCore
 import SwiftUI
 
+// View state lives in ObservableObjects instead of @State: with only the Command Line Tools
+// installed, newer SDKs lack the SwiftUI macro plugin that @State needs.
+final class Flag: ObservableObject {
+    @Published var value = false
+}
+
+@MainActor
+final class AccountsUIState: ObservableObject {
+    @Published var adding: ProviderKind?
+    @Published var renaming: Account?
+    @Published var newName = ""
+}
+
+@MainActor
+final class APIKeyForm: ObservableObject {
+    @Published var name = ""
+    @Published var key = ""
+    @Published var region = "default"
+    @Published var error: String?
+    @Published var saving = false
+}
+
 struct AccountsView: View {
     @ObservedObject var model: AppModel
-    @State private var adding: ProviderKind?
-    @State private var renaming: Account?
-    @State private var newName = ""
+    @StateObject private var ui = AccountsUIState()
 
     private var local: [Account] { model.accounts.filter(\.isLocal) }
     private var managed: [Account] { model.accounts.filter { !$0.isLocal } }
@@ -37,7 +57,7 @@ struct AccountsView: View {
             HStack {
                 Menu("Add Account") {
                     ForEach(ProviderKind.allCases) { p in
-                        Button(p.usesOAuth ? "\(p.displayName) — sign in with browser…" : "\(p.displayName) — API key…") { adding = p }
+                        Button(p.usesOAuth ? "\(p.displayName) — sign in with browser…" : "\(p.displayName) — API key…") { ui.adding = p }
                     }
                 }
                 .fixedSize()
@@ -47,17 +67,17 @@ struct AccountsView: View {
             .padding(12)
         }
         .frame(minWidth: 560, minHeight: 420)
-        .sheet(item: $adding) { provider in
+        .sheet(item: $ui.adding) { provider in
             if provider.usesOAuth, let login = LoginController(provider: provider, model: model) {
-                OAuthLoginSheet(login: login) { adding = nil }
+                OAuthLoginSheet(login: login) { ui.adding = nil }
             } else {
-                APIKeySheet(provider: provider, model: model) { adding = nil }
+                APIKeySheet(provider: provider, model: model) { ui.adding = nil }
             }
         }
-        .alert("Rename account", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Name", text: $newName)
-            Button("Save") { if let a = renaming { model.rename(a, to: newName) }; renaming = nil }
-            Button("Cancel", role: .cancel) { renaming = nil }
+        .alert("Rename account", isPresented: Binding(get: { ui.renaming != nil }, set: { if !$0 { ui.renaming = nil } })) {
+            TextField("Name", text: $ui.newName)
+            Button("Save") { if let a = ui.renaming { model.rename(a, to: ui.newName) }; ui.renaming = nil }
+            Button("Cancel", role: .cancel) { ui.renaming = nil }
         }
     }
 
@@ -75,7 +95,7 @@ struct AccountsView: View {
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
                 .help("Show in menu bar")
             Menu {
-                Button("Rename…") { newName = account.label; renaming = account }
+                Button("Rename…") { ui.newName = account.label; ui.renaming = account }
                 if !account.isLocal {
                     Button("Remove", role: .destructive) { model.remove(account) }
                 }
@@ -89,7 +109,6 @@ struct AccountsView: View {
 struct OAuthLoginSheet: View {
     @StateObject var login: LoginController
     let close: () -> Void
-    @State private var pasted = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -110,9 +129,9 @@ struct OAuthLoginSheet: View {
                      : "Waiting for the browser… If the browser is on another device or the page fails to load, paste the final URL from its address bar.")
                     .fixedSize(horizontal: false, vertical: true)
                 HStack {
-                    TextField(manual ? "Paste code" : "Paste redirect URL (optional)", text: $pasted)
+                    TextField(manual ? "Paste code" : "Paste redirect URL (optional)", text: $login.pasted)
                         .textFieldStyle(.roundedBorder)
-                    Button("Submit") { login.submitPasted(pasted) }.disabled(pasted.isEmpty)
+                    Button("Submit") { login.submitPasted(login.pasted) }.disabled(login.pasted.isEmpty)
                 }
                 HStack {
                     Button("Copy sign-in link") {
@@ -153,11 +172,7 @@ struct APIKeySheet: View {
     let provider: ProviderKind
     @ObservedObject var model: AppModel
     let close: () -> Void
-    @State private var name = ""
-    @State private var key = ""
-    @State private var region = "default"
-    @State private var error: String?
-    @State private var saving = false
+    @StateObject private var form = APIKeyForm()
 
     private var regions: [(String, String)] {
         switch provider {
@@ -174,23 +189,23 @@ struct APIKeySheet: View {
                 Text("Add \(provider.displayName) API key").font(.title3.bold())
             }
             Form {
-                TextField("Name", text: $name, prompt: Text("\(provider.displayName) account"))
-                SecureField("API key", text: $key)
+                TextField("Name", text: $form.name, prompt: Text("\(provider.displayName) account"))
+                SecureField("API key", text: $form.key)
                 if !regions.isEmpty {
-                    Picker("Endpoint", selection: $region) {
+                    Picker("Endpoint", selection: $form.region) {
                         ForEach(regions, id: \.0) { Text($0.1).tag($0.0) }
                     }
                 }
             }
             Text(provider == .deepseek ? "DeepSeek reports account balance, not usage windows." : "Usage is read from the provider's quota API with this key. The key is stored in your login Keychain.")
                 .font(.caption).foregroundStyle(.secondary)
-            if let error { Text(error).foregroundStyle(.red).font(.callout) }
+            if let error = form.error { Text(error).foregroundStyle(.red).font(.callout) }
             HStack {
                 Spacer()
                 Button("Cancel", action: close)
                 Button("Add") { Task { await save() } }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(key.trimmingCharacters(in: .whitespaces).isEmpty || saving)
+                    .disabled(form.key.trimmingCharacters(in: .whitespaces).isEmpty || form.saving)
             }
         }
         .padding(20)
@@ -198,27 +213,27 @@ struct APIKeySheet: View {
     }
 
     private func save() async {
-        saving = true
-        defer { saving = false }
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        form.saving = true
+        defer { form.saving = false }
+        let trimmed = form.key.trimmingCharacters(in: .whitespacesAndNewlines)
         var cred = APIKeyCredential(key: trimmed)
         switch provider {
-        case .glm: cred.baseURL = region == "intl" ? GLM.internationalBaseURL : GLM.defaultBaseURL
-        case .minimax: cred.region = region == "intl" ? "global" : "cn"
+        case .glm: cred.baseURL = form.region == "intl" ? GLM.internationalBaseURL : GLM.defaultBaseURL
+        case .minimax: cred.region = form.region == "intl" ? "global" : "cn"
         default: break
         }
         // Validate before saving so typos surface immediately.
         do {
             _ = try await UsageFetcher.fetch(provider, credential: .apiKey(cred), client: URLSessionHTTPClient())
         } catch {
-            self.error = "Check failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
+            form.error = "Check failed: \((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)"
             return
         }
         do {
-            try await model.addManaged(provider: provider, label: name.isEmpty ? "\(provider.displayName) account" : name, credential: .apiKey(cred))
+            try await model.addManaged(provider: provider, label: form.name.isEmpty ? "\(provider.displayName) account" : form.name, credential: .apiKey(cred))
             close()
         } catch {
-            self.error = error.localizedDescription
+            form.error = error.localizedDescription
         }
     }
 }
