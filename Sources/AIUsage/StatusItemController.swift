@@ -12,6 +12,7 @@ final class StatusItemController: NSObject {
     private var cancellables: Set<AnyCancellable> = []
     private var appearanceObservation: NSKeyValueObservation?
     private var eventMonitor: Any?
+    private var clockTimer: Timer?
 
     init(model: AppModel, settings: AppSettings, actions: PanelActions) {
         self.model = model
@@ -38,6 +39,12 @@ final class StatusItemController: NSObject {
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
             .store(in: &cancellables)
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
+        // The refresh-guide cursors depend on the current time, so redraw even when no data changed
+        // (as the panel does), and after sleep, when timers may have been suspended for hours.
+        clockTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.render() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(screensChanged), name: NSWorkspace.didWakeNotification, object: nil)
         render()
     }
 

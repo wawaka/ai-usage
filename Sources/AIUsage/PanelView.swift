@@ -223,7 +223,7 @@ struct RefreshButton: View {
             HStack(spacing: 4) {
                 if let updated {
                     // Re-rendered every 30 s so the age stays current while the dropdown is open.
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
                         Text(Format.ago(updated, now: context.date)).monospacedDigit()
                     }
                 }
