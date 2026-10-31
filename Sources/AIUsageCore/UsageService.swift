@@ -13,6 +13,9 @@ public actor UsageService {
     private var lastSnapshots: [String: UsageSnapshot]
     private var discovered: [String: DiscoveredCredential] = [:]
 
+    public private(set) var policy = PollPolicy()
+    private var schedule: [String: PollState] = [:]
+
     static func fingerprint(_ token: String) -> String {
         SHA256.hash(Data(token.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
     }
@@ -101,6 +104,50 @@ public actor UsageService {
         snapshotStore.save(lastSnapshots)
     }
 
+    // MARK: Schedule
+
+    public func setPolicy(_ policy: PollPolicy) {
+        self.policy = policy
+        let latest = Date().addingTimeInterval(policy.maxInterval)
+        for (id, var s) in schedule {
+            s.interval = min(max(s.interval, policy.minInterval), policy.maxInterval)
+            s.nextDue = min(s.nextDue, latest)
+            schedule[id] = s
+        }
+    }
+
+    /// Visible accounts whose next automatic update is due (never polled yet counts as due).
+    public func dueAccounts(now: Date = Date()) -> [Account] {
+        visibleAccounts().filter { a in schedule[a.id].map { $0.nextDue <= now } ?? true }
+    }
+
+    /// Makes every account due now (e.g. after the Mac wakes), without resetting their intervals.
+    public func markAllDue(now: Date = Date()) {
+        for id in schedule.keys { schedule[id]?.nextDue = now }
+    }
+
+    public func nextRefresh(_ id: String) -> Date? { schedule[id]?.nextDue }
+
+    /// Updates the account's schedule after a poll: back to the minimum interval when the numbers
+    /// changed, doubled (up to the maximum) when they didn't or the poll failed. A rate limit waits
+    /// at least as long as the provider asked; refreshes are refused until then.
+    private func reschedule(_ id: String, changed: Bool, rateLimited: Bool = false, retryAfter: TimeInterval? = nil,
+                            snapshot: UsageSnapshot?, now: Date) {
+        var s = schedule[id] ?? PollState(interval: policy.minInterval, nextDue: now)
+        s.interval = changed ? policy.minInterval : min(max(s.interval * 2, policy.minInterval), policy.maxInterval)
+        var wait = s.interval
+        s.blockedUntil = nil
+        if rateLimited {
+            if let retryAfter { wait = max(wait, retryAfter) }
+            s.blockedUntil = now.addingTimeInterval(retryAfter ?? PollPolicy.rateLimitCooldown)
+        } else if let next = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 > now }).min() {
+            // Catch a window reset soon after it happens instead of up to `maxInterval` later.
+            wait = min(wait, next.timeIntervalSince(now) + 30)
+        }
+        s.nextDue = now.addingTimeInterval(wait)
+        schedule[id] = s
+    }
+
     // MARK: Polling
 
     /// Last known statuses without hitting the network (for instant display at launch).
@@ -132,20 +179,40 @@ public actor UsageService {
         return secrets.load(account.id).map { ($0, nil) }
     }
 
-    /// Fetches one account (used by the app to update accounts individually as they finish).
-    public func refresh(_ account: Account) async -> AccountStatus {
+    /// Fetches one account (used by the app to update accounts individually as they finish) and
+    /// schedules its next automatic update. While the provider's rate limit lasts, nothing is sent.
+    public func refresh(_ account: Account, now: Date = Date()) async -> AccountStatus {
+        let stale = lastSnapshots[account.id]
+        if let until = schedule[account.id]?.blockedUntil, until > now {
+            return failed(account, stale, Self.rateLimitMessage(until: schedule[account.id]?.nextDue ?? until))
+        }
         do {
             let snapshot = try await fetch(account)
+            reschedule(account.id, changed: snapshot.usageDiffers(from: stale), snapshot: snapshot, now: now)
             lastSnapshots[account.id] = snapshot
             snapshotStore.save(lastSnapshots)
-            return AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
+            var status = AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
+            status.nextRefresh = schedule[account.id]?.nextDue
+            return status
+        } catch UsageError.rateLimited(let retryAfter) {
+            reschedule(account.id, changed: false, rateLimited: true, retryAfter: retryAfter, snapshot: stale, now: now)
+            return failed(account, stale, Self.rateLimitMessage(until: schedule[account.id]!.nextDue))
         } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            // Keep showing the last good numbers, flagged with the error.
-            let stale = lastSnapshots[account.id]
-            return AccountStatus(account: account, snapshot: stale, error: message,
-                                 analysis: UsageAnalysis(state: .unavailable, message: message))
+            reschedule(account.id, changed: false, snapshot: stale, now: now)
+            return failed(account, stale, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    static func rateLimitMessage(until: Date) -> String {
+        "Rate limited by the provider. Next try at \(Format.clock(until))."
+    }
+
+    /// Keeps showing the last good numbers, flagged with the error.
+    private func failed(_ account: Account, _ stale: UsageSnapshot?, _ message: String) -> AccountStatus {
+        var status = AccountStatus(account: account, snapshot: stale, error: message,
+                                   analysis: UsageAnalysis(state: .unavailable, message: message))
+        status.nextRefresh = schedule[account.id]?.nextDue
+        return status
     }
 
     private func fetch(_ account: Account) async throws -> UsageSnapshot {
@@ -192,4 +259,24 @@ public actor UsageService {
             return try await UsageFetcher.fetch(account.provider, credential: .oauth(token), client: client)
         }
     }
+}
+
+/// Bounds for adaptive polling: each account starts at `minInterval`; every poll that returns the
+/// same numbers (or fails) doubles its interval up to `maxInterval`; a change resets it.
+public struct PollPolicy: Sendable, Equatable {
+    public var minInterval: TimeInterval
+    public var maxInterval: TimeInterval
+    /// After a 429 without `Retry-After`, refreshes (manual ones too) are refused for this long.
+    public static let rateLimitCooldown: TimeInterval = 120
+
+    public init(minInterval: TimeInterval = 120, maxInterval: TimeInterval = 1800) {
+        self.minInterval = max(30, minInterval)
+        self.maxInterval = max(self.minInterval, maxInterval)
+    }
+}
+
+struct PollState {
+    var interval: TimeInterval
+    var nextDue: Date
+    var blockedUntil: Date?
 }

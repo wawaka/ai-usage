@@ -9,8 +9,8 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
   percentages, or be replaced by them.
 - **Dropdown card:** one section per account, with where its credentials come from (e.g.
   `Claude Code · Keychain “Claude Code-credentials”`, `Codex CLI · ~/.codex/auth.json`), 5h/7d meters
-  with percent and time left (e.g. `2d 5h`), and the last update time in the top-right corner, which
-  turns into a spinner while that account loads. Clicking the menu bar item refreshes. Each section
+  with percent and time left (e.g. `2d 5h`), and `updated 14:32 ⟳` in the top-right corner: click it
+  to update that account now (it turns into a spinner while loading). Each section
   has a *Menu bar* checkbox (leave the account out of the menu bar title but keep it in the list) and
   a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).
 - **Usage refresh guide:** an I-shaped cursor on each usage bar (menu bar and dropdown) marks how far
@@ -58,8 +58,16 @@ AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list,
 
 ## Behaviour
 
-- **Background polling:** every 5 minutes by default (1–30 minutes is configurable), plus right
-  after the Mac wakes.
+- **Adaptive polling:** each account has its own schedule.
+  - While its usage changes, it's checked every *minimum* interval (default 2 min).
+  - Each check that returns the same numbers doubles the wait, up to the *maximum* (default 30 min).
+    A change resets it to the minimum.
+  - It's also checked about 30 s after one of its windows resets, and right after the Mac wakes.
+  - Both bounds are set in Settings. Opening the dropdown doesn't poll.
+- **Rate limits:** HTTP 429 from any provider (plus GLM codes 1302/1303 and MiniMax 1002) keeps the
+  last numbers and shows when the next try is.
+  - With `Retry-After`, nothing is sent until that time has passed, not even a manual refresh.
+  - Without it, there's a 2-minute cooldown, then the normal back-off applies.
 - **Title width:** *Auto* measures the space right of the notch (or half the menu bar). It picks all
   accounts if they fit, then the most urgent account, then a single gauge icon.
 - **States:** *High* from 70%, *Limit* at 90%+. DeepSeek shows its balance instead.

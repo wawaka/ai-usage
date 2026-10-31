@@ -272,9 +272,14 @@ struct SettingsView: View {
                 }
             }
             Section("Updates") {
-                Picker("Refresh every", selection: $settings.refreshMinutes) {
-                    ForEach([1, 2, 5, 10, 15, 30], id: \.self) { Text("\($0) min").tag($0) }
+                Picker("Check at most every", selection: $settings.pollMinMinutes) {
+                    ForEach([1, 2, 5, 10, 15], id: \.self) { Text("\($0) min").tag($0) }
                 }
+                Picker("Check at least every", selection: $settings.pollMaxMinutes) {
+                    ForEach([5, 10, 15, 30, 60, 120], id: \.self) { Text("\($0) min").tag($0) }
+                }
+                Text("Each account is checked at the shorter interval while its usage changes. Each check that finds the same numbers doubles the wait, up to the longer one. Rate-limited (HTTP 429) accounts wait as long as the provider asks.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining quota instead of used", isOn: $settings.showRemaining)
                 Toggle("Notify when an account nears its limit", isOn: $settings.notifyAtLimit)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)

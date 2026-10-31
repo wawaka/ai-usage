@@ -6,6 +6,14 @@ import FoundationNetworking
 public struct HTTPResponse: Sendable {
     public var status: Int
     public var body: Data
+    /// Header fields with lowercased names.
+    public var headers: [String: String]
+
+    public init(status: Int, body: Data, headers: [String: String] = [:]) {
+        self.status = status
+        self.body = body
+        self.headers = headers
+    }
 }
 
 public protocol HTTPClient: Sendable {
@@ -19,8 +27,12 @@ public struct URLSessionHTTPClient: HTTPClient {
         var request = request
         if request.timeoutInterval > 30 { request.timeoutInterval = 20 }
         let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        return HTTPResponse(status: status, body: data)
+        let http = response as? HTTPURLResponse
+        var headers: [String: String] = [:]
+        for (k, v) in http?.allHeaderFields ?? [:] {
+            if let k = k as? String { headers[k.lowercased()] = "\(v)" }
+        }
+        return HTTPResponse(status: http?.statusCode ?? 0, body: data, headers: headers)
     }
 }
 
@@ -43,6 +55,9 @@ enum HTTP {
         if response.status == 401 || response.status == 403 {
             throw UsageError.unauthorized(snippet)
         }
+        if response.status == 429 {
+            throw UsageError.rateLimited(retryAfter: retryAfter(response.headers["retry-after"]))
+        }
         guard (200..<300).contains(response.status) else {
             throw UsageError.http(response.status, snippet)
         }
@@ -56,6 +71,17 @@ enum HTTP {
         var req = request(url, method: "POST", headers: ["Content-Type": "application/json"])
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await json(client, req)
+    }
+
+    /// `Retry-After` as seconds from now: either delta-seconds or an HTTP date.
+    static func retryAfter(_ value: String?, now: Date = Date()) -> TimeInterval? {
+        guard let value = value?.trimmingCharacters(in: .whitespaces), !value.isEmpty else { return nil }
+        if let seconds = Double(value) { return max(0, seconds) }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "GMT")
+        f.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return f.date(from: value).map { max(0, $0.timeIntervalSince(now)) }
     }
 
     static func postForm(_ client: HTTPClient, _ url: URL, _ body: [String: String]) async throws -> [String: Any] {

@@ -111,6 +111,13 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
     }
 
     public var fiveHour: UsageWindow? { windows.first { $0.kind == .fiveHour } }
+
+    /// Whether the numbers differ from `other` (ignoring when they were observed and small reset-time jitter).
+    public func usageDiffers(from other: UsageSnapshot?) -> Bool {
+        guard let other else { return true }
+        func key(_ w: [UsageWindow]) -> [String] { w.map { "\($0.label)=\(($0.usedPercent * 10).rounded())" } }
+        return key(windows) != key(other.windows) || key(extraWindows) != key(other.extraWindows) || balance != other.balance
+    }
     public var sevenDay: UsageWindow? { windows.first { $0.kind == .sevenDay } }
 }
 
@@ -196,6 +203,8 @@ public struct AccountStatus: Sendable, Identifiable {
     public var error: String?
     public var analysis: UsageAnalysis?
     public var lastAttempt: Date
+    /// When the next automatic update of this account is due.
+    public var nextRefresh: Date?
 
     public var id: String { account.id }
 
@@ -214,6 +223,8 @@ public enum UsageError: Error, LocalizedError, Equatable {
     case decoding(String)
     case expiredLocalToken(String)
     case missingCredential(String)
+    /// HTTP 429 (or a provider's rate-limit error code); `retryAfter` from the `Retry-After` header.
+    case rateLimited(retryAfter: TimeInterval?)
     case other(String)
 
     public var errorDescription: String? {
@@ -223,6 +234,7 @@ public enum UsageError: Error, LocalizedError, Equatable {
         case .decoding(let m): return "Unexpected response: \(m)"
         case .expiredLocalToken(let tool): return "Token from \(tool) expired. Open \(tool) to renew it, or add an account in AI Usage."
         case .missingCredential(let m): return m
+        case .rateLimited: return "Rate limited by the provider"
         case .other(let m): return m
         }
     }

@@ -39,7 +39,8 @@ struct PanelView: View {
                                refreshing: model.refreshingIDs.contains(status.id),
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
                                                   set: { model.setInMenuBar(status.account, $0) }),
-                               hide: { model.setHidden(status.account, true) })
+                               hide: { model.setHidden(status.account, true) },
+                               reload: { model.refresh(status.account) })
                     .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
@@ -106,6 +107,7 @@ struct AccountSection: View {
     let refreshing: Bool
     @Binding var inMenuBar: Bool
     let hide: () -> Void
+    let reload: () -> Void
 
     private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
@@ -131,8 +133,8 @@ struct AccountSection: View {
                 ZStack(alignment: .trailing) {
                     if refreshing {
                         ProgressView().controlSize(.small)
-                    } else if let at = status.snapshot?.observedAt {
-                        Text("updated \(Format.clock(at))").font(.system(size: 11).monospacedDigit()).foregroundStyle(.tertiary)
+                    } else {
+                        RefreshButton(updated: status.snapshot?.observedAt, next: status.nextRefresh, action: reload)
                     }
                 }
                 .frame(minWidth: 20, alignment: .trailing)
@@ -163,6 +165,31 @@ struct AccountSection: View {
                     .help("Hide from the list (bring it back in Accounts…)")
             }
         }
+    }
+}
+
+/// "updated 14:32 ⟳": click to update this account now.
+struct RefreshButton: View {
+    let updated: Date?
+    let next: Date?
+    let action: () -> Void
+    @StateObject private var hover = Flag()
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let updated { Text("updated \(Format.clock(updated))").monospacedDigit() }
+                Image(systemName: "arrow.clockwise")
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(hover.value ? Color.primary : Color.secondary.opacity(0.7))
+            .padding(.horizontal, 5).padding(.vertical, 2)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(hover.value ? 0.08 : 0)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover.value = $0 }
+        .help(next.map { "Update now · next automatic update at \(Format.clock($0))" } ?? "Update now")
     }
 }
 

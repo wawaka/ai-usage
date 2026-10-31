@@ -118,6 +118,8 @@ public enum GLM {
     }
 
     public static func parse(_ obj: [String: Any], now: Date = Date()) throws -> UsageSnapshot {
+        // 1302/1303: too many concurrent / too frequent requests.
+        if let code = number(obj["code"]), code == 1302 || code == 1303 { throw UsageError.rateLimited(retryAfter: nil) }
         guard (obj["success"] as? Bool) != false, let data = dict(obj["data"]),
               let limits = data["limits"] as? [[String: Any]] else {
             throw UsageError.decoding(string(obj["msg"]) ?? "GLM quota response missing data")
@@ -181,6 +183,7 @@ public enum MiniMax {
         if let code = number(dict(obj["base_resp"])?["status_code"]), code != 0 {
             let msg = string(dict(obj["base_resp"])?["status_msg"]) ?? "unknown error"
             if code == 1004 { throw UsageError.unauthorized(msg) }
+            if code == 1002 { throw UsageError.rateLimited(retryAfter: nil) }
             throw UsageError.other("MiniMax API error: \(msg) (code \(Int(code)))")
         }
         return try parse(obj)

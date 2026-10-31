@@ -33,7 +33,13 @@ enum TitleStyle: String, CaseIterable, Identifiable {
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
 
-    @Published var refreshMinutes: Int { didSet { defaults.set(refreshMinutes, forKey: "refreshMinutes") } }
+    /// Adaptive polling bounds: an account is polled every `pollMinMinutes` while its numbers change,
+    /// backing off (doubling) up to `pollMaxMinutes` while they stay the same.
+    @Published var pollMinMinutes: Int { didSet { defaults.set(pollMinMinutes, forKey: "pollMinMinutes") } }
+    @Published var pollMaxMinutes: Int { didSet { defaults.set(pollMaxMinutes, forKey: "pollMaxMinutes") } }
+    var pollPolicy: PollPolicy {
+        PollPolicy(minInterval: TimeInterval(pollMinMinutes * 60), maxInterval: TimeInterval(pollMaxMinutes * 60))
+    }
     @Published var titleMode: TitleMode { didSet { defaults.set(titleMode.rawValue, forKey: "titleMode") } }
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
     /// Show how much quota is left instead of how much is used.
@@ -54,7 +60,8 @@ final class AppSettings: ObservableObject {
     }
 
     init() {
-        refreshMinutes = defaults.object(forKey: "refreshMinutes") as? Int ?? 5
+        pollMinMinutes = defaults.object(forKey: "pollMinMinutes") as? Int ?? 2
+        pollMaxMinutes = defaults.object(forKey: "pollMaxMinutes") as? Int ?? 30
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
         showRemaining = defaults.bool(forKey: "showRemaining")
@@ -92,8 +99,12 @@ final class AppModel: ObservableObject {
         keychain = reader
         service = UsageService(secrets: KeychainSecretStore(), keychain: reader)
 
-        settings.$refreshMinutes.dropFirst().sink { [weak self] _ in
-            Task { @MainActor in self?.scheduleTimer() }
+        settings.$pollMinMinutes.combineLatest(settings.$pollMaxMinutes).dropFirst().sink { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                await self.service.setPolicy(self.settings.pollPolicy)
+                self.poll()
+            }
         }.store(in: &cancellables)
         settings.$readClaudeKeychain.dropFirst().sink { [weak self] on in
             Task { @MainActor in
@@ -105,52 +116,70 @@ final class AppModel: ObservableObject {
         }.store(in: &cancellables)
 
         Task {
+            await service.setPolicy(settings.pollPolicy)
             statuses = await service.cachedStatuses()
             await reloadAccounts()
             refresh()
         }
-        scheduleTimer()
-        // Refresh right after the Mac wakes instead of waiting for the next tick.
+        // Each account has its own adaptive schedule (UsageService); this tick only checks who is due.
+        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.poll() }
+        }
+        timer?.tolerance = 10
+        // Update right after the Mac wakes instead of waiting for each account's next turn.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-    }
-
-    private func scheduleTimer() {
-        timer?.invalidate()
-        let interval = TimeInterval(max(1, settings.refreshMinutes) * 60)
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
-        }
-        timer?.tolerance = 15
-    }
-
-    /// Re-reads local credentials, then fetches every visible account; each row updates as soon as
-    /// its own request finishes. Accounts already being fetched are skipped.
-    func refresh() {
-        let service = self.service
-        Task {
-            await service.rescan()
-            let visible = await service.visibleAccounts()
-            let cached = await service.cachedStatuses()
-            // Keep current numbers (with fresh account names/order) while new ones load.
-            statuses = visible.map { account in
-                var s = statuses.first { $0.id == account.id } ?? cached.first { $0.id == account.id }
-                    ?? AccountStatus(account: account, snapshot: nil, error: nil, analysis: nil, lastAttempt: .distantPast)
-                s.account = account
-                return s
+            Task { @MainActor in
+                await self?.service.markAllDue()
+                self?.poll()
             }
-            await reloadAccounts()
-            let pending = visible.filter { !refreshingIDs.contains($0.id) }
-            refreshingIDs.formUnion(pending.map(\.id))
-            for account in pending {
-                Task {
-                    let status = await service.refresh(account)
-                    refreshingIDs.remove(account.id)
-                    if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
-                    notifyIfNeeded([status])
-                    if refreshingIDs.isEmpty { lastRefresh = Date() }
-                }
+        }
+    }
+
+    /// Fetches only the accounts whose automatic update is due.
+    func poll() {
+        Task {
+            guard !(await service.dueAccounts()).isEmpty else { return }
+            await rescanAndFetch { await $0.dueAccounts() }
+        }
+    }
+
+    /// Re-reads local credentials and fetches every visible account now (accounts still inside a
+    /// provider's rate limit are skipped by the service and keep showing when they can be tried).
+    func refresh() {
+        Task { await rescanAndFetch { await $0.visibleAccounts() } }
+    }
+
+    /// Fetches one account now.
+    func refresh(_ account: Account) {
+        fetch([account])
+    }
+
+    private func rescanAndFetch(_ pick: (UsageService) async -> [Account]) async {
+        await service.rescan()
+        let visible = await service.visibleAccounts()
+        let cached = await service.cachedStatuses()
+        // Keep current numbers (with fresh account names/order) while new ones load.
+        statuses = visible.map { account in
+            var s = statuses.first { $0.id == account.id } ?? cached.first { $0.id == account.id }
+                ?? AccountStatus(account: account, snapshot: nil, error: nil, analysis: nil, lastAttempt: .distantPast)
+            s.account = account
+            return s
+        }
+        await reloadAccounts()
+        fetch(await pick(service))
+    }
+
+    /// Each row updates as soon as its own request finishes; accounts already being fetched are skipped.
+    private func fetch(_ accounts: [Account]) {
+        let pending = accounts.filter { !refreshingIDs.contains($0.id) }
+        refreshingIDs.formUnion(pending.map(\.id))
+        for account in pending {
+            Task {
+                let status = await service.refresh(account)
+                refreshingIDs.remove(account.id)
+                if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
+                notifyIfNeeded([status])
+                if refreshingIDs.isEmpty { lastRefresh = Date() }
             }
         }
     }
