@@ -20,7 +20,7 @@ A native macOS menu bar app that shows how much of your AI coding subscriptions 
 
 ## Install
 
-Requires macOS 14 (Sonoma) or later.
+Requires an Apple Silicon Mac (M1 or later) with macOS 14 (Sonoma) or later.
 
 1. Download `AIUsage-<version>.zip` from the
    [latest release](https://github.com/wawaka/ai-usage/releases/latest) and unzip it.

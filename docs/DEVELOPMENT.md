@@ -22,8 +22,11 @@ swift test                           # core tests (also run on Linux)
 swift test --filter PollingTests     # one test class
 Scripts/dev.sh                       # debug build → replaces and relaunches build/AI Usage.app
 CONFIG=release Scripts/dev.sh        # same, optimised
-Scripts/package_app.sh               # universal release build → dist/AIUsage-<version>.zip
+Scripts/package_app.sh               # Apple Silicon release build → dist/AIUsage-<version>.zip
 ```
+
+Release builds are Apple Silicon only. The code still builds for Intel: `ARCHS="arm64 x86_64" Scripts/package_app.sh`
+produces a universal app, but it's untested on Intel Macs.
 
 `Scripts/dev.sh` quits whichever copy of AI Usage is running, wherever it was launched from, then
 starts the fresh build.

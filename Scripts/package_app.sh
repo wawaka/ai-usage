@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# Builds AI Usage.app (universal) and zips it into dist/.
+# Builds AI Usage.app (Apple Silicon) and zips it into dist/.
 #
 #   Scripts/package_app.sh                 # ad-hoc signed
+#   ARCHS="arm64 x86_64" Scripts/package_app.sh   # universal build incl. Intel (untested, off by default)
 #   SIGN_IDENTITY="Developer ID Application: …" NOTARY_PROFILE=<notarytool keychain profile> Scripts/package_app.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="$(cat VERSION)"
 BUILD="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}"
-ARCHS="${ARCHS:-arm64 x86_64}"
+ARCHS="${ARCHS:-arm64}"
 APP="build/AI Usage.app"
 ZIP="dist/AIUsage-${VERSION}.zip"
 

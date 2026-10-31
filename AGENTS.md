@@ -12,7 +12,7 @@ swift test --filter PollingTests             # one test class
 swift test --filter PollingTests/testRateLimitHonoursRetryAfterAndBlocksRequests   # one test
 Scripts/dev.sh                               # macOS: debug build, quit running app, replace build/AI Usage.app, relaunch
 SIGN_IDENTITY="AI Usage Dev" Scripts/dev.sh  # same, with a stable signature (avoids repeated Keychain prompts)
-Scripts/package_app.sh                       # universal release build → dist/AIUsage-<version>.zip
+Scripts/package_app.sh                       # Apple Silicon release build → dist/AIUsage-<version>.zip (ARCHS="arm64 x86_64" for universal)
 python3 Scripts/embed_marks.py               # regenerate Sources/AIUsage/ProviderIcons.swift from Assets/ProviderMarks/*.svg (needs rsvg-convert)
 ```
 
