@@ -115,6 +115,8 @@ struct AccountSection: View {
                         }
                     }
                     Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Text(status.account.sourceDescription).font(.system(size: 10)).foregroundStyle(.tertiary)
+                        .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
                 if refreshing { ProgressView().controlSize(.small) }
@@ -136,7 +138,6 @@ struct AccountSection: View {
                 }
             }
         }
-        .help(status.account.sourceDescription)
     }
 
     @ViewBuilder private var headline: some View {

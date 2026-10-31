@@ -36,15 +36,29 @@ enum Theme {
         (appearance ?? NSAppearance.currentDrawing()).bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 
-    /// Draws a provider mark (rounded square + monogram) into `rect` in the current context.
+    private static let marks: [String: NSImage] = ProviderIconData.png.compactMapValues {
+        Data(base64Encoded: $0).flatMap(NSImage.init(data:))
+    }
+
+    /// The provider's own mark (Assets/ProviderMarks), with its dark-mode variant where one exists.
+    static func markImage(_ provider: ProviderKind, dark: Bool) -> NSImage? {
+        (dark ? marks[provider.rawValue + "-dark"] : nil) ?? marks[provider.rawValue]
+    }
+
+    /// Draws a provider mark into `rect` in the current context (monogram square if no image).
     static func drawMark(_ provider: ProviderKind, in rect: NSRect, badge: Int? = nil) {
-        let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.24, yRadius: rect.height * 0.24)
-        hex(provider.markColorHex).setFill()
-        path.fill()
-        let font = NSFont.systemFont(ofSize: rect.height * 0.62, weight: .heavy)
-        let text = NSAttributedString(string: provider.monogram, attributes: [.font: font, .foregroundColor: NSColor.white])
-        let size = text.size()
-        text.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
+        if let image = markImage(provider, dark: isDark(nil)) {
+            NSGraphicsContext.current?.imageInterpolation = .high
+            image.draw(in: rect)
+        } else {
+            let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.24, yRadius: rect.height * 0.24)
+            hex(provider.markColorHex).setFill()
+            path.fill()
+            let font = NSFont.systemFont(ofSize: rect.height * 0.62, weight: .heavy)
+            let text = NSAttributedString(string: provider.monogram, attributes: [.font: font, .foregroundColor: NSColor.white])
+            let size = text.size()
+            text.draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
+        }
         if let badge {
             // Small index so several accounts of one provider stay distinguishable.
             let bFont = NSFont.monospacedDigitSystemFont(ofSize: rect.height * 0.42, weight: .bold)
@@ -62,8 +76,17 @@ enum Theme {
 struct ProviderMark: View {
     let provider: ProviderKind
     var size: CGFloat = 20
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        if let image = Theme.markImage(provider, dark: colorScheme == .dark) {
+            Image(nsImage: image).resizable().interpolation(.high).frame(width: size, height: size)
+        } else {
+            monogram
+        }
+    }
+
+    private var monogram: some View {
         RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
             .fill(Color(nsColor: Theme.hex(provider.markColorHex)))
             .frame(width: size, height: size)
