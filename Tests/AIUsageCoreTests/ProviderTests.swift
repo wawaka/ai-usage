@@ -119,6 +119,10 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(w.display(remaining: true, now: now).percent, 70)
         XCTAssertEqual(w.display(remaining: true, now: now).time!, 0.8, accuracy: 1e-9)
         XCTAssertNil(UsageWindow(kind: .sevenDay, usedPercent: 1, resetsAt: nil).elapsedFraction())
+        let untouched = UsageWindow(kind: .fiveHour, usedPercent: 0, resetsAt: now.addingTimeInterval(5 * 3600), windowMinutes: 300)
+        XCTAssertTrue(untouched.isUntouched)
+        XCTAssertNil(untouched.display(remaining: false, now: now).time, "no time position before the window starts")
+        XCTAssertEqual(untouched.display(remaining: true, now: now).percent, 100)
     }
 
     func testFormat() {

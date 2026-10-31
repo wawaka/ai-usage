@@ -265,15 +265,18 @@ struct WindowRow: View {
 
     var body: some View {
         let shown = window.display(remaining: remaining)
+        let idle = window.isUntouched
+        let color = idle ? Color.secondary : tint
         // The bar takes all the width between the label and the percent + time-left columns.
+        // An untouched window is a plain grey bar: no cursor, no countdown (its clock hasn't started).
         HStack(spacing: 6) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: labelWidth, alignment: .leading)
-            Meter(value: shown.percent, time: refreshGuide ? shown.time : nil, tint: tint)
-                .help(timeHelp(shown.time))
+            Meter(value: shown.percent, time: refreshGuide ? shown.time : nil, tint: idle ? Color.secondary.opacity(0.5) : tint)
+                .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
-                .foregroundStyle(tint).frame(width: 34, alignment: .trailing)
-            Text(Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                .foregroundStyle(color).frame(width: 34, alignment: .trailing)
+            Text(idle ? "" : Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: 48, alignment: .trailing)
                 .help(Format.reset(window.resetsAt))
         }

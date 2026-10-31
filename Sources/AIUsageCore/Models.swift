@@ -76,10 +76,15 @@ public struct UsageWindow: Codable, Equatable, Sendable {
         return min(1, max(0, 1 - left))
     }
 
+    /// Nothing used yet. Providers start a window's clock on first use (until then Codex keeps
+    /// reporting a reset a full window from now, Claude none), so there's no countdown or pace to show.
+    public var isUntouched: Bool { usedPercent <= 0 }
+
     /// What a meter shows: used% and elapsed time, or (inverted) remaining% and time left.
     /// Either way, a usage fill past the time fill means quota runs out before the window resets.
+    /// An untouched window has no time position.
     public func display(remaining: Bool, now: Date = Date()) -> (percent: Double, time: Double?) {
-        let elapsed = elapsedFraction(now: now)
+        let elapsed = isUntouched ? nil : elapsedFraction(now: now)
         return remaining ? (100 - usedPercent, elapsed.map { 1 - $0 }) : (usedPercent, elapsed)
     }
 }

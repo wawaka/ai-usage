@@ -19,6 +19,8 @@ enum TitleRenderer {
         var percent: Double
         /// Fraction of the window's time elapsed (or left, when showing remaining); drawn as an I-beam cursor.
         var time: Double?
+        /// Window not started yet: drawn grey, without a cursor.
+        var untouched = false
     }
 
     struct Segment {
@@ -42,7 +44,7 @@ enum TitleRenderer {
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
                 let d = w.display(remaining: remaining)
-                return Bar(percent: d.percent, time: refreshGuide ? d.time : nil)
+                return Bar(percent: d.percent, time: refreshGuide ? d.time : nil, untouched: w.isUntouched)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
@@ -98,7 +100,7 @@ enum TitleRenderer {
                                          xRadius: barRadius, yRadius: barRadius).fill()
                         }
                         capsule(barWidth, barBg)
-                        if bar.percent > 0 { capsule(barWidth * min(bar.percent, 100) / 100, fill) }
+                        if bar.percent > 0 { capsule(barWidth * min(bar.percent, 100) / 100, bar.untouched ? Theme.muted : fill) }
                         // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
                         if let time = bar.time {
                             drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)

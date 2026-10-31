@@ -71,6 +71,8 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
 - **Title width:** *Auto* measures the space to the right of the notch, or half the menu bar on
   displays without one. It shows all accounts if they fit, then only the most urgent account, then
   a single gauge icon.
+- **Untouched windows:** a window with 0% used hasn't started; providers start its clock on first use.
+  It's drawn as a plain grey bar, with no countdown and no refresh guide.
 - **Usage refresh guide:** the cursor sits at the fraction of the window's time that has elapsed,
   or remained when *Show remaining* is on.
 - **Notifications** are sent once when an account reaches 90% or its balance runs out.
