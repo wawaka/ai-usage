@@ -1,126 +1,105 @@
 # AI Usage
 
-A native macOS menu bar app (Swift, AppKit + SwiftUI) that shows subscription and coding-plan
-usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its look is modelled on
-[coding-usage-bar](https://github.com/hanzhangzzz/coding-usage-bar):
+A native macOS menu bar app that shows how much of your AI coding subscriptions you've used:
+**Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**.
 
 <p align="center"><img src="docs/screenshot.png" width="383" alt="AI Usage: menu bar bars for Codex and Claude, and the dropdown with 5h/7d meters, refresh guide cursors and settings switches"></p>
 
-- **Menu bar:** each account gets a provider mark and two stacked bars (5h on top, 7d below),
-  coloured by usage: green below 70%, amber from 70%, coral at 90%+. Accounts are separated by thin dividers. Optionally the bars can show
-  percentages, or be replaced by them.
-- **Dropdown card:** one section per account, with where its credentials come from (e.g.
-  `Claude Code · Keychain “Claude Code-credentials”`, `Codex CLI · ~/.codex/auth.json`), 5h/7d meters
-  with percent and time left (e.g. `2d 5h`), and the data's age (`5m ago ⟳`) in the top-right corner: click it
-  to update that account now (it turns into a spinner while loading). Each section
-  has a *Menu bar* checkbox (leave the account out of the menu bar title but keep it in the list) and
-  a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).
-- **Usage refresh guide:** an I-shaped cursor on each usage bar (menu bar and dropdown) marks how far
-  the window has run toward its reset. Usage reaching past the cursor means you're using quota faster
-  than the window elapses. Toggle it from the dropdown (⌘G) or in Settings.
-- **Dropdown switches:** *Show remaining* (⌘I), *Usage refresh guide* (⌘G) and *Account names* (⌘N, hides
-  emails in the dropdown, tooltip and notifications) are real switches at the bottom of the dropdown, mirrored in Settings.
-- **Used / remaining:** *Show remaining* (dropdown, ⌘I, or Settings) inverts every number and bar to
-  quota left; the cursor then marks time left, so the comparison reads the same way.
+- **At a glance:** each account shows two bars in the menu bar, 5-hour on top and weekly below. They're
+  green below 70%, amber from 70% and red at 90%+.
+- **Details on click:** percentages, time until each limit resets, and how old the numbers are.
+  Click `⟳` on an account to update it now.
+- **Pace check:** a small `I` cursor on each bar shows how far the window has run toward its reset.
+  If usage reaches past the cursor, you're on track to hit the limit early.
+- **Zero setup:** it finds logins you already have in Claude Code, Codex CLI, OpenCode and Pi,
+  without changing anything they've stored.
+- **More accounts:** you can sign in to more accounts, including several for the same provider, or add API keys.
+- **Gentle polling:** checks back less often while usage doesn't change, and backs off when a
+  provider asks it to slow down.
+- **Notifications** when an account nears its limit.
 
-## Accounts
+## Install
 
-**Found on this Mac (read-only).** AI Usage picks up logins other tools already have:
+Requires macOS 14 (Sonoma) or later.
 
-| Source | Provider(s) |
-|---|---|
-| Claude Code — `~/.claude*/.credentials.json`, Keychain `Claude Code-credentials*` | Claude |
-| Codex CLI — `~/.codex*/auth.json` (`$CODEX_HOME`) | Codex |
-| OpenCode — `~/.local/share/opencode/auth.json` | Claude, Codex, GLM, DeepSeek, MiniMax, Kimi |
-| Pi — `~/.pi/agent/auth.json` | Claude, Codex, GLM (Z.ai) |
-| Claude Code `settings.json` `env` (`ANTHROPIC_BASE_URL` pointing at GLM / Kimi / MiniMax / DeepSeek) | GLM, Kimi, MiniMax, DeepSeek |
-| claude-lanes — `~/.config/claude-lanes/config.env` | same as above |
+1. Download `AIUsage-<version>.zip` from the
+   [latest release](https://github.com/wawaka/ai-usage/releases/latest) and unzip it.
+2. Move **AI Usage.app** to `/Applications`.
+3. Open it. The first time, macOS says it can't verify the developer, because the app isn't
+   notarized. Either:
+   - right-click the app → **Open** → **Open**, or
+   - run `xattr -dr com.apple.quarantine "/Applications/AI Usage.app"` and open it normally.
 
-These sources are **strictly read-only**:
-- Files are only opened for reading, and Keychain items are only read.
-- Tokens are **never refreshed**, because refreshing would rotate the owning tool's refresh token
-  and log it out. When a borrowed token expires, the card says so; open the owning tool to renew it.
-- Reading Claude Code's Keychain item makes macOS ask for access. Choose **Allow**:
-  **Always Allow** would change that item's access list. AI Usage then keeps a copy of the token in
-  its own Keychain item (`dev.ai-usage.borrowed`), so it asks again only when that token expires.
-  If you deny, it remembers and won't ask again until you re-enable the source in Settings or
-  press *Try again* in Accounts.
-- A test checks that a full discovery and poll leaves every file under `$HOME` byte-for-byte
-  unchanged.
+The app lives only in the menu bar, with no Dock icon. To start it automatically, turn on
+**Settings → Launch at login**.
 
-**Added in AI Usage.** Use *Accounts… → Add Account* to add any number of accounts, including
-several for the same provider:
-- **Claude and Codex:** sign in through the browser (OAuth with PKCE), with a localhost callback.
-  If the browser can't reach this Mac, paste the code or the final URL instead.
-- **GLM, DeepSeek, MiniMax and Kimi:** enter an API key. It is checked against the provider before
-  it is saved.
+### Build from source
 
-These secrets live in AI Usage's own Keychain items (`dev.ai-usage.accounts`), and their tokens are
-refreshed automatically.
-
-AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list, last snapshots, poll schedule), to its own Keychain items, and to its own preferences.
-
-## Behaviour
-
-- **Adaptive polling:** each account has its own schedule.
-  - While its usage changes, it's checked every *minimum* interval (default 2 min).
-  - Each check that returns the same numbers doubles the wait, up to the *maximum* (default 30 min).
-    A change resets it to the minimum.
-  - It's also checked about 30 s after one of its windows resets.
-  - The schedule (and any rate-limit wait) is saved. A relaunch or wake shows the saved numbers and fetches only
-    accounts whose interval has passed; `5m ago` in the dropdown is the age of the saved data.
-  - Both bounds are set in Settings. Opening the dropdown doesn't poll.
-- **Rate limits:** HTTP 429 from any provider (plus GLM codes 1302/1303 and MiniMax 1002) keeps the
-  last numbers and shows when the next try is.
-  - With `Retry-After`, nothing is sent until that time has passed, not even a manual refresh.
-  - Without it, there's a 2-minute cooldown, then the normal back-off applies.
-- **Title width:** *Auto* measures the space right of the notch (or half the menu bar). It picks all
-  accounts if they fit, then the most urgent account, then a single gauge icon.
-- **States:** *High* from 70%, *Limit* at 90%+. DeepSeek shows its balance instead.
-- **Notifications:** sent when an account reaches 90% or its balance runs out. This can be turned
-  off.
-
-## Build
-
-Requires macOS 14+ and Xcode 15+ (Swift 5.10+).
+With Xcode 15+ or the Command Line Tools:
 
 ```sh
-swift test                    # core tests (also run on Linux)
-Scripts/package_app.sh        # → dist/AIUsage-<version>.zip (universal, ad-hoc signed)
-open "build/AI Usage.app"
+git clone https://github.com/wawaka/ai-usage.git && cd ai-usage
+Scripts/package_app.sh                      # → build/AI Usage.app and dist/AIUsage-<version>.zip
+cp -R "build/AI Usage.app" /Applications/
 ```
 
-For a release that opens without Gatekeeper warnings, sign it with a Developer ID and notarize it:
+A locally built app opens without the Gatekeeper warning. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+for the development workflow.
 
-```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=notary Scripts/package_app.sh
-```
+## Getting started
 
-An ad-hoc build that was downloaded rather than built locally needs `xattr -dr com.apple.quarantine "AI Usage.app"`
-(or right-click → Open) the first time.
+**Accounts you're already logged in to show up on their own.** If you use Claude Code, Codex
+CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 
-CI (`.github/workflows/build.yml`) runs the core tests on Linux. On macOS it builds and zips the
-app, uploads the zip as an artifact, and attaches it to `v*` tag releases.
+- **Keychain prompt:** Claude Code keeps its login in the Keychain, so macOS asks once whether
+  AI Usage may read it. Choose **Allow**, not *Always Allow*: that leaves Claude Code's
+  Keychain entry exactly as it is. If you'd rather not be asked, turn off **Settings → Read
+  Claude Code login from Keychain** and sign in to Claude in AI Usage instead.
+- **Expired logins:** AI Usage never renews another tool's login. If one expires, its card says
+  so. Open that tool once and it renews itself.
 
-### CLI
+**Adding accounts.** Use **Accounts… → Add Account**:
+- **Claude or Codex:** sign in through your browser. If the browser can't get back to the app,
+  paste the code or the final URL instead.
+- **GLM, DeepSeek, MiniMax or Kimi:** paste an API key. It's checked before it's saved.
 
-`ai-usage-cli [status|accounts] [--json]` uses the same core. It is bundled at
-`AI Usage.app/Contents/Helpers/ai-usage-cli`.
+**Customising.** The switches at the bottom of the dropdown cover the common options:
+- **Show remaining** (⌘I): quota left instead of used.
+- **Usage refresh guide** (⌘G): the `I` cursors.
+- **Account names** (⌘N): hide emails, e.g. for screenshots.
 
-## Layout
+**Per account:**
+- **Menu bar** checkbox: keep the account in the dropdown but not the menu bar.
+- **Hide:** remove it from the list. Bring it back in Accounts….
 
-```
-Sources/AIUsageCore   providers, local discovery, OAuth, storage (Foundation only)
-Sources/AIUsage       menu bar app: status item renderer, dropdown, accounts/settings windows, login
-Sources/AIUsageCLI    diagnostic CLI
-Tests/                core tests incl. the read-only guarantee
-Scripts/              packaging + icon generation
-```
+**Settings also has:**
+- the menu bar layout (all accounts, most urgent only, or just an icon) and style (bars, percentages, or both)
+- how often to check
+- notifications
 
-Caveat: the Claude and Codex usage endpoints and OAuth clients are the undocumented ones used by
-the official CLIs, so they may change without notice.
+## Privacy
 
-Provider marks in `Assets/ProviderMarks` are SVGs from [Lobe Icons](https://github.com/lobehub/lobe-icons) (MIT).
-They're embedded as vector PDFs, so they stay sharp at every size. The marks belong to their owners
-and only identify the provider (see `Assets/ProviderMarks/NOTICE.md`). After changing them, run
-`Scripts/embed_marks.py` (needs `brew install librsvg`).
+- **Network:** AI Usage only talks to the providers' own servers.
+- **Other tools' logins:** it reads their files and Keychain entries but never changes them.
+- **What it writes:** only its own data, in `~/Library/Application Support/ai-usage/`, its own
+  Keychain entries (`dev.ai-usage.*`) and its preferences.
+
+Details are in [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md).
+
+## Uninstall
+
+1. Quit AI Usage from its dropdown and delete **AI Usage.app**.
+2. Optionally remove its data:
+   ```sh
+   rm -rf ~/Library/Application\ Support/ai-usage
+   defaults delete dev.ai-usage.app
+   ```
+   Then, in **Keychain Access**, search for `dev.ai-usage` and delete those entries.
+
+## Notes
+
+- Claude and Codex usage comes from the same undocumented endpoints their official CLIs use, so
+  it may break if those change.
+- Provider logos are from [Lobe Icons](https://github.com/lobehub/lobe-icons). They belong to
+  their owners and are used only to identify each provider.
+- Inspired by [coding-usage-bar](https://github.com/hanzhangzzz/coding-usage-bar).
