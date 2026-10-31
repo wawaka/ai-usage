@@ -15,7 +15,7 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
   a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).
 - **Usage refresh guide:** an I-shaped cursor on each usage bar (menu bar and dropdown) marks how far
   the window has run toward its reset. Usage reaching past the cursor means you're using quota faster
-  than the window elapses. It can be turned off in Settings.
+  than the window elapses. Toggle it from the dropdown (⌘G) or in Settings.
 - **Used / remaining:** *Show remaining* (dropdown, ⌘I, or Settings) inverts every number and bar to
   quota left; the cursor then marks time left, so the comparison reads the same way.
 
@@ -107,6 +107,7 @@ poc/                  original Python proof of concept
 Caveat: the Claude and Codex usage endpoints and OAuth clients are the undocumented ones used by
 the official CLIs, so they may change without notice.
 
-Provider marks in `Assets/ProviderMarks` are copied from coding-usage-bar. They belong to their
-owners and only identify the provider (see `Assets/ProviderMarks/NOTICE.md`). After changing them,
-run `Scripts/embed_marks.py`.
+Provider marks in `Assets/ProviderMarks` are SVGs from [Lobe Icons](https://github.com/lobehub/lobe-icons) (MIT).
+They're embedded as vector PDFs, so they stay sharp at every size. The marks belong to their owners
+and only identify the provider (see `Assets/ProviderMarks/NOTICE.md`). After changing them, run
+`Scripts/embed_marks.py` (needs `brew install librsvg`).

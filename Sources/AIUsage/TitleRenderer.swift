@@ -121,24 +121,19 @@ enum TitleRenderer {
         return image
     }
 
-    /// I-beam cursor: a 1pt stem slightly taller than the bar with short serifs top and bottom,
-    /// outlined in the opposite tone so it stays visible over both track and fill.
+    /// I-beam cursor: a hairline stem just taller than the bar with tiny serifs top and bottom,
+    /// drawn translucent so it hints at the position without competing with the usage fill.
     static func drawGuide(atX gx: CGFloat, barY: CGFloat, dark: Bool) {
-        let cx = gx.rounded()
-        let overhang: CGFloat = 1, serif: CGFloat = 1.5
+        let cx = (gx * 2).rounded() / 2
+        let overhang: CGFloat = 0.5, serif: CGFloat = 1
         let top = barY + barHeight + overhang, bottom = barY - overhang
-        func beam() -> NSBezierPath {
-            let p = NSBezierPath()
-            p.move(to: NSPoint(x: cx, y: bottom)); p.line(to: NSPoint(x: cx, y: top))
-            p.move(to: NSPoint(x: cx - serif, y: top)); p.line(to: NSPoint(x: cx + serif, y: top))
-            p.move(to: NSPoint(x: cx - serif, y: bottom)); p.line(to: NSPoint(x: cx + serif, y: bottom))
-            p.lineCapStyle = .butt
-            return p
-        }
-        let halo = beam(); halo.lineWidth = 2.5
-        (dark ? NSColor.black : NSColor.white).withAlphaComponent(0.6).setStroke(); halo.stroke()
-        let stroke = beam(); stroke.lineWidth = 1
-        (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.9).setStroke(); stroke.stroke()
+        let p = NSBezierPath()
+        p.move(to: NSPoint(x: cx, y: bottom)); p.line(to: NSPoint(x: cx, y: top))
+        p.move(to: NSPoint(x: cx - serif, y: top)); p.line(to: NSPoint(x: cx + serif, y: top))
+        p.move(to: NSPoint(x: cx - serif, y: bottom)); p.line(to: NSPoint(x: cx + serif, y: bottom))
+        p.lineWidth = 0.75
+        (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.55).setStroke()
+        p.stroke()
     }
 
     /// Fallback when nothing fits / nothing is configured: a gauge glyph tinted by the worst state.

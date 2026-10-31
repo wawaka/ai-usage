@@ -62,6 +62,8 @@ struct PanelView: View {
                 .keyboardShortcut("r")
             MenuRow(title: settings.showRemaining ? "Show used" : "Show remaining", shortcut: "I") { settings.showRemaining.toggle() }
                 .keyboardShortcut("i")
+            MenuRow(title: settings.refreshGuide ? "Hide usage refresh guide" : "Show usage refresh guide", shortcut: "G") { settings.refreshGuide.toggle() }
+                .keyboardShortcut("g")
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)
             MenuRow(title: "Settings…", shortcut: ",", action: actions.openSettings)
                 .keyboardShortcut(",")
@@ -220,15 +222,13 @@ struct Meter: View {
                     Capsule().fill(tint).frame(width: max(6, w * min(value, 100) / 100), height: 6)
                 }
                 if let time {
-                    IBeam().stroke(Color(nsColor: .windowBackgroundColor).opacity(0.7), lineWidth: 3)
-                        .frame(width: 5, height: 12).offset(x: w * min(max(time, 0), 1) - 2.5)
-                    IBeam().stroke(Color.primary.opacity(0.9), lineWidth: 1.25)
-                        .frame(width: 5, height: 12).offset(x: w * min(max(time, 0), 1) - 2.5)
+                    IBeam().stroke(Color.primary.opacity(0.45), lineWidth: 1)
+                        .frame(width: 4, height: 9).offset(x: w * min(max(time, 0), 1) - 2)
                 }
             }
             .frame(height: geo.size.height)
         }
-        .frame(height: 12)
+        .frame(height: 10)
     }
 }
 

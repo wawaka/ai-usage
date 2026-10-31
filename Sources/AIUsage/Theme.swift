@@ -36,7 +36,8 @@ enum Theme {
         (appearance ?? NSAppearance.currentDrawing()).bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 
-    private static let marks: [String: NSImage] = ProviderIconData.png.compactMapValues {
+    /// Vector (PDF-backed) images: drawn into any rect they're re-rendered at that size and scale.
+    private static let marks: [String: NSImage] = ProviderIconData.pdf.compactMapValues {
         Data(base64Encoded: $0).flatMap(NSImage.init(data:))
     }
 
@@ -45,10 +46,19 @@ enum Theme {
         (dark ? marks[provider.rawValue + "-dark"] : nil) ?? marks[provider.rawValue]
     }
 
+    /// The mark at exactly `size` points; the drawing handler re-runs for each backing scale,
+    /// so the vector stays sharp (SwiftUI would otherwise rasterize at the PDF's own 24pt).
+    static func markImage(_ provider: ProviderKind, dark: Bool, size: CGFloat) -> NSImage? {
+        guard let base = markImage(provider, dark: dark) else { return nil }
+        return NSImage(size: NSSize(width: size, height: size), flipped: false) { rect in
+            base.draw(in: rect)
+            return true
+        }
+    }
+
     /// Draws a provider mark into `rect` in the current context (monogram square if no image).
     static func drawMark(_ provider: ProviderKind, in rect: NSRect, badge: Int? = nil) {
         if let image = markImage(provider, dark: isDark(nil)) {
-            NSGraphicsContext.current?.imageInterpolation = .high
             image.draw(in: rect)
         } else {
             let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.24, yRadius: rect.height * 0.24)
@@ -79,8 +89,8 @@ struct ProviderMark: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if let image = Theme.markImage(provider, dark: colorScheme == .dark) {
-            Image(nsImage: image).resizable().interpolation(.high).frame(width: size, height: size)
+        if let image = Theme.markImage(provider, dark: colorScheme == .dark, size: size) {
+            Image(nsImage: image).frame(width: size, height: size)
         } else {
             monogram
         }
