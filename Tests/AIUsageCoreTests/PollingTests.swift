@@ -83,3 +83,18 @@ final class PollingTests: XCTestCase {
         }
     }
 }
+
+extension PollingTests {
+    func testScheduleSurvivesRelaunch() async throws {
+        let http = ScriptedHTTP(Self.usage(10))
+        let (service, account) = try await makeService(http)
+        let t0 = Date()
+        _ = await service.refresh(account, now: t0)
+        let relaunched = UsageService(secrets: MemorySecrets(), client: http, home: dir, directory: dir)
+        await relaunched.setPolicy(PollPolicy(minInterval: 60, maxInterval: 400))
+        let dueEarly = await relaunched.dueAccounts(now: t0.addingTimeInterval(30)).map(\.id)
+        let dueLater = await relaunched.dueAccounts(now: t0.addingTimeInterval(61)).map(\.id)
+        XCTAssertEqual(dueEarly, [], "a relaunch doesn't refetch before the interval has passed")
+        XCTAssertEqual(dueLater, [account.id])
+    }
+}

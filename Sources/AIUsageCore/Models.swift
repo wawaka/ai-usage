@@ -208,6 +208,12 @@ public struct AccountStatus: Sendable, Identifiable {
 
     public var id: String { account.id }
 
+    func with(nextRefresh: Date?) -> AccountStatus {
+        var copy = self
+        copy.nextRefresh = nextRefresh
+        return copy
+    }
+
     public init(account: Account, snapshot: UsageSnapshot?, error: String?, analysis: UsageAnalysis?, lastAttempt: Date = Date()) {
         self.account = account
         self.snapshot = snapshot

@@ -118,23 +118,22 @@ final class AppModel: ObservableObject {
             }
         }.store(in: &cancellables)
 
+        // At launch, show the saved numbers and fetch only accounts whose interval has passed.
         Task {
             await service.setPolicy(settings.pollPolicy)
+            await service.rescan()
             statuses = await service.cachedStatuses()
             await reloadAccounts()
-            refresh()
+            poll()
         }
         // Each account has its own adaptive schedule (UsageService); this tick only checks who is due.
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.poll() }
         }
         timer?.tolerance = 10
-        // Update right after the Mac wakes instead of waiting for each account's next turn.
+        // After the Mac wakes, check right away which accounts became due while it slept.
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                await self?.service.markAllDue()
-                self?.poll()
-            }
+            Task { @MainActor in self?.poll() }
         }
     }
 

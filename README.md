@@ -56,7 +56,7 @@ several for the same provider:
 These secrets live in AI Usage's own Keychain items (`dev.ai-usage.accounts`), and their tokens are
 refreshed automatically.
 
-AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list, last snapshots), to its own Keychain items, and to its own preferences.
+AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list, last snapshots, poll schedule), to its own Keychain items, and to its own preferences.
 
 ## Behaviour
 
@@ -64,7 +64,9 @@ AI Usage writes only to `~/Library/Application Support/ai-usage/` (account list,
   - While its usage changes, it's checked every *minimum* interval (default 2 min).
   - Each check that returns the same numbers doubles the wait, up to the *maximum* (default 30 min).
     A change resets it to the minimum.
-  - It's also checked about 30 s after one of its windows resets, and right after the Mac wakes.
+  - It's also checked about 30 s after one of its windows resets.
+  - The schedule (and any rate-limit wait) is saved. A relaunch or wake shows the saved numbers and fetches only
+    accounts whose interval has passed; `5m ago` in the dropdown is the age of the saved data.
   - Both bounds are set in Settings. Opening the dropdown doesn't poll.
 - **Rate limits:** HTTP 429 from any provider (plus GLM codes 1302/1303 and MiniMax 1002) keeps the
   last numbers and shows when the next try is.

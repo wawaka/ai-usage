@@ -8,6 +8,7 @@ public actor UsageService {
     private let client: HTTPClient
     private let stateStore: JSONFileStore<AccountsState>
     private let snapshotStore: JSONFileStore<[String: UsageSnapshot]>
+    private let scheduleStore: JSONFileStore<[String: PollState]>
 
     public private(set) var state: AccountsState
     private var lastSnapshots: [String: UsageSnapshot]
@@ -27,10 +28,13 @@ public actor UsageService {
         discovery = LocalDiscovery(home: home, keychain: keychain)
         stateStore = JSONFileStore("accounts.json", directory: directory)
         snapshotStore = JSONFileStore("snapshots.json", directory: directory)
+        scheduleStore = JSONFileStore("schedule.json", directory: directory)
         state = stateStore.load() ?? AccountsState()
         // Usage history from the removed pacing feature; it is AI Usage's own file.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent("samples.json"))
         lastSnapshots = snapshotStore.load() ?? [:]
+        // Persisted so a relaunch honours each account's interval and any provider rate limit.
+        schedule = scheduleStore.load() ?? [:]
     }
 
     // MARK: Accounts
@@ -100,6 +104,8 @@ public actor UsageService {
         state.renamed[id] = nil
         state.hidden.remove(id)
         lastSnapshots[id] = nil
+        schedule[id] = nil
+        scheduleStore.save(schedule)
         stateStore.save(state)
         snapshotStore.save(lastSnapshots)
     }
@@ -114,19 +120,18 @@ public actor UsageService {
             s.nextDue = min(s.nextDue, latest)
             schedule[id] = s
         }
+        scheduleStore.save(schedule)
     }
 
-    /// Visible accounts whose next automatic update is due (never polled yet counts as due).
+    /// Visible accounts whose next automatic update is due. Without a schedule entry, an account
+    /// with saved numbers is due `minInterval` after they were observed; one never polled is due now.
     public func dueAccounts(now: Date = Date()) -> [Account] {
-        visibleAccounts().filter { a in schedule[a.id].map { $0.nextDue <= now } ?? true }
+        visibleAccounts().filter { a in (nextRefresh(a.id) ?? now) <= now }
     }
 
-    /// Makes every account due now (e.g. after the Mac wakes), without resetting their intervals.
-    public func markAllDue(now: Date = Date()) {
-        for id in schedule.keys { schedule[id]?.nextDue = now }
+    public func nextRefresh(_ id: String) -> Date? {
+        schedule[id]?.nextDue ?? lastSnapshots[id].map { $0.observedAt.addingTimeInterval(policy.minInterval) }
     }
-
-    public func nextRefresh(_ id: String) -> Date? { schedule[id]?.nextDue }
 
     /// Updates the account's schedule after a poll: back to the minimum interval when the numbers
     /// changed, doubled (up to the maximum) when they didn't or the poll failed. A rate limit waits
@@ -146,6 +151,7 @@ public actor UsageService {
         }
         s.nextDue = now.addingTimeInterval(wait)
         schedule[id] = s
+        scheduleStore.save(schedule)
     }
 
     // MARK: Polling
@@ -157,6 +163,7 @@ public actor UsageService {
             return AccountStatus(account: a, snapshot: snap, error: nil,
                                  analysis: snap.map(UsageAnalysis.of),
                                  lastAttempt: snap?.observedAt ?? .distantPast)
+                .with(nextRefresh: nextRefresh(a.id))
         }
     }
 
@@ -275,7 +282,7 @@ public struct PollPolicy: Sendable, Equatable {
     }
 }
 
-struct PollState {
+struct PollState: Codable {
     var interval: TimeInterval
     var nextDue: Date
     var blockedUntil: Date?

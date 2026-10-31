@@ -54,6 +54,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
 - Each account has a `PollState`. The interval doubles while `usageDiffers` is false and resets to `PollPolicy.minInterval` on a change. A poll is pulled forward to just after a window's reset.
 - `UsageError.rateLimited` comes from HTTP 429 with `Retry-After`, or from provider codes (GLM 1302/1303, MiniMax 1002). It sets `blockedUntil`, which refuses even manual refreshes.
 - `AppModel` only ticks every 30 s, asking `dueAccounts()`. Opening the popover does not poll.
+- The schedule is persisted in `schedule.json`, so launch and wake honour intervals and rate limits. Without an entry, an account is due `minInterval` after its saved snapshot's `observedAt`.
 
 ## Hard rules
 
@@ -62,7 +63,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
   - An expired or 401 local token becomes `UsageError.expiredLocalToken`.
   - Only managed tokens get refreshed.
   - `testPollingNeverWritesOrRefreshesLocalCredentials` checks that `$HOME` stays byte-for-byte unchanged.
-- **The app writes only to its own state:** `~/Library/Application Support/ai-usage/` (`accounts.json`, `snapshots.json`; overridable with `AI_USAGE_HOME`), its own Keychain items (`dev.ai-usage.accounts`, `dev.ai-usage.borrowed`), and its UserDefaults.
+- **The app writes only to its own state:** `~/Library/Application Support/ai-usage/` (`accounts.json`, `snapshots.json`, `schedule.json`; overridable with `AI_USAGE_HOME`), its own Keychain items (`dev.ai-usage.accounts`, `dev.ai-usage.borrowed`), and its UserDefaults.
 - **Keychain access is built to prompt as rarely as possible** (`Keychain.swift`).
   - Each item is attempted once per run, and denials are persisted.
   - A borrowed token is copied into AI Usage's own item.
