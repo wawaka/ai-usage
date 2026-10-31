@@ -135,6 +135,9 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(Format.countdown(now.addingTimeInterval(420), now: now), "7m")
         XCTAssertEqual(Format.countdown(now.addingTimeInterval(30), now: now), "<1m")
         XCTAssertEqual(Format.countdown(now.addingTimeInterval(-5), now: now), "now")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-30), now: now), "just now")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-300), now: now), "5m ago")
+        XCTAssertEqual(Format.ago(now.addingTimeInterval(-(2 * 3600 + 300)), now: now), "2h 5m ago")
         XCTAssertEqual(Format.percent(0.4), "<1%")
         XCTAssertEqual(Format.planLabel("claude_max"), "Max")
     }

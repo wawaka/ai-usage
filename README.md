@@ -9,7 +9,7 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
   percentages, or be replaced by them.
 - **Dropdown card:** one section per account, with where its credentials come from (e.g.
   `Claude Code · Keychain “Claude Code-credentials”`, `Codex CLI · ~/.codex/auth.json`), 5h/7d meters
-  with percent and time left (e.g. `2d 5h`), and `updated 14:32 ⟳` in the top-right corner: click it
+  with percent and time left (e.g. `2d 5h`), and the data's age (`5m ago ⟳`) in the top-right corner: click it
   to update that account now (it turns into a spinner while loading). Each section
   has a *Menu bar* checkbox (leave the account out of the menu bar title but keep it in the list) and
   a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).

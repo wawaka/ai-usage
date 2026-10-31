@@ -168,7 +168,7 @@ struct AccountSection: View {
     }
 }
 
-/// "updated 14:32 ⟳": click to update this account now.
+/// "5m ago ⟳": age of the data; click to update this account now.
 struct RefreshButton: View {
     let updated: Date?
     let next: Date?
@@ -178,7 +178,12 @@ struct RefreshButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 4) {
-                if let updated { Text("updated \(Format.clock(updated))").monospacedDigit() }
+                if let updated {
+                    // Re-rendered every 30 s so the age stays current while the dropdown is open.
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(Format.ago(updated, now: context.date)).monospacedDigit()
+                    }
+                }
                 Image(systemName: "arrow.clockwise")
             }
             .font(.system(size: 11))
@@ -189,7 +194,8 @@ struct RefreshButton: View {
         }
         .buttonStyle(.plain)
         .onHover { hover.value = $0 }
-        .help(next.map { "Update now · next automatic update at \(Format.clock($0))" } ?? "Update now")
+        .help([updated.map { "Updated at \(Format.clock($0))" }, "click to update now",
+               next.map { "next automatic update at \(Format.clock($0))" }].compactMap { $0 }.joined(separator: " · "))
     }
 }
 

@@ -29,6 +29,12 @@ public enum Format {
         return parts.isEmpty ? "<1m" : parts.joined(separator: " ")
     }
 
+    /// Time since `date`, same components as `countdown`: "just now", "5m ago", "2h 5m ago".
+    public static func ago(_ date: Date, now: Date = Date()) -> String {
+        guard now.timeIntervalSince(date) >= 60 else { return "just now" }
+        return "\(countdown(now, now: date)) ago"
+    }
+
     public static func clock(_ date: Date, calendar: Calendar = .current) -> String {
         let f = DateFormatter()
         f.calendar = calendar
