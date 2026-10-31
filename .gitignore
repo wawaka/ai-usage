@@ -1,7 +1,6 @@
-__pycache__/
-*.egg-info/
+.DS_Store
 .build/
+.swiftpm/
 build/
 dist/
 *.xcodeproj/xcuserdata/
-.swiftpm/

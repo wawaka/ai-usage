@@ -109,7 +109,6 @@ Sources/AIUsage       menu bar app: status item renderer, dropdown, accounts/set
 Sources/AIUsageCLI    diagnostic CLI
 Tests/                core tests incl. the read-only guarantee
 Scripts/              packaging + icon generation
-poc/                  original Python proof of concept
 ```
 
 Caveat: the Claude and Codex usage endpoints and OAuth clients are the undocumented ones used by
