@@ -36,7 +36,10 @@ struct PanelView: View {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
                 AccountSection(status: status, remaining: settings.showRemaining,
-                               refreshing: model.refreshingIDs.contains(status.id))
+                               refreshing: model.refreshingIDs.contains(status.id),
+                               inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
+                                                  set: { model.setInMenuBar(status.account, $0) }),
+                               hide: { model.setHidden(status.account, true) })
                     .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
@@ -98,6 +101,8 @@ struct AccountSection: View {
     let status: AccountStatus
     let remaining: Bool
     let refreshing: Bool
+    @Binding var inMenuBar: Bool
+    let hide: () -> Void
 
     private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
@@ -119,34 +124,40 @@ struct AccountSection: View {
                         .lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
-                if refreshing { ProgressView().controlSize(.small) }
-                headline
+                // Spinner while loading, otherwise the time of the last update, in the same spot.
+                ZStack(alignment: .trailing) {
+                    if refreshing {
+                        ProgressView().controlSize(.small)
+                    } else if let at = status.snapshot?.observedAt {
+                        Text("updated \(Format.clock(at))").font(.system(size: 11).monospacedDigit()).foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(minWidth: 20, alignment: .trailing)
             }
             if let snap = status.snapshot {
                 ForEach(Array((snap.windows + snap.extraWindows).enumerated()), id: \.offset) { _, w in
                     WindowRow(window: w, tint: tint, remaining: remaining)
                 }
+                if let balance = snap.balance {
+                    HStack(spacing: 8) {
+                        Text("Balance").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                            .frame(width: 58, alignment: .leading)
+                        Text(balance.formatted).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(tint)
+                    }
+                }
             }
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center, spacing: 10) {
                 Text(status.error ?? status.analysis?.message ?? "")
                     .font(.system(size: 11))
                     .foregroundStyle(status.error != nil ? Color(nsColor: Theme.alert) : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
-                if let at = status.snapshot?.observedAt {
-                    Text("updated \(Format.clock(at))").font(.system(size: 11)).foregroundStyle(.tertiary)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder private var headline: some View {
-        if let balance = status.snapshot?.balance {
-            Text(balance.formatted).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(tint)
-        } else if let pct = Format.headlinePercent(status.snapshot, remaining: remaining) {
-            VStack(alignment: .trailing, spacing: -2) {
-                Text(Format.percent(pct)).font(.system(size: 20, weight: .bold).monospacedDigit()).foregroundStyle(tint)
-                Text(remaining ? "left" : "used").font(.system(size: 9)).foregroundStyle(.tertiary)
+                Toggle("Menu bar", isOn: $inMenuBar)
+                    .toggleStyle(.checkbox).controlSize(.small).font(.system(size: 11))
+                    .help("Show this account in the menu bar title")
+                Button("Hide", action: hide)
+                    .buttonStyle(.link).controlSize(.small).font(.system(size: 11))
+                    .help("Hide from the list (bring it back in Accounts…)")
             }
         }
     }

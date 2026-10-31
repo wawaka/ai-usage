@@ -8,10 +8,12 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
   coloured by usage: green below 70%, amber from 70%, coral at 90%+. Accounts are separated by thin dividers. Optionally the bars can show
   percentages, or be replaced by them.
 - **Dropdown card:** one section per account, with where its credentials come from (e.g.
-  `Claude Code · Keychain “Claude Code-credentials”`, `Codex CLI · ~/.codex/auth.json`), the main percentage, 5h/7d meters with time
-  left (e.g. `2d 5h`), and the time of the last update. Clicking the menu bar item refreshes;
-  each account shows its own spinner while it loads.
-- **Time shade:** behind each usage bar (menu bar and dropdown), a lighter shade of the same colour
+  `Claude Code · Keychain “Claude Code-credentials”`, `Codex CLI · ~/.codex/auth.json`), 5h/7d meters
+  with percent and time left (e.g. `2d 5h`), and the last update time in the top-right corner, which
+  turns into a spinner while that account loads. Clicking the menu bar item refreshes. Each section
+  has a *Menu bar* checkbox (leave the account out of the menu bar title but keep it in the list) and
+  a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).
+- **Time shade:** behind each usage bar (dropdown, and the menu bar unless turned off in Settings), a lighter shade of the same colour
   shows how much of the window's time has passed. Usage reaching past the shade means you're using
   quota faster than the window elapses (a thin tick marks the time when usage covers it).
 - **Used / remaining:** *Show remaining* (dropdown, ⌘I, or Settings) inverts every number and bar to

@@ -66,6 +66,11 @@ public actor UsageService {
         stateStore.save(state)
     }
 
+    public func setInMenuBar(_ id: String, _ shown: Bool) {
+        if shown { state.notInMenuBar.remove(id) } else { state.notInMenuBar.insert(id) }
+        stateStore.save(state)
+    }
+
     public func rename(_ id: String, to name: String?) {
         state.renamed[id] = (name?.isEmpty ?? true) ? nil : name
         stateStore.save(state)

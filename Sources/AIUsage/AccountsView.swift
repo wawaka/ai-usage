@@ -101,10 +101,15 @@ struct AccountsView: View {
                 Text(account.sourceDescription).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             Spacer()
+            Toggle("Menu bar", isOn: Binding(get: { !model.notInMenuBarIDs.contains(account.id) },
+                                             set: { model.setInMenuBar(account, $0) }))
+                .toggleStyle(.checkbox).controlSize(.small)
+                .disabled(model.hiddenIDs.contains(account.id))
+                .help("Show in the menu bar title")
             Toggle("Show", isOn: Binding(get: { !model.hiddenIDs.contains(account.id) },
                                          set: { model.setHidden(account, !$0) }))
                 .toggleStyle(.switch).controlSize(.small).labelsHidden()
-                .help("Show in menu bar")
+                .help("Show in the dropdown and menu bar (hidden accounts aren't polled)")
             Menu {
                 Button("Rename…") { ui.newName = account.label; ui.renaming = account }
                 if !account.isLocal {
@@ -261,6 +266,7 @@ struct SettingsView: View {
                 Picker("Style", selection: $settings.titleStyle) {
                     ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
                 }
+                Toggle("Shade bars with time elapsed in each window", isOn: $settings.menuBarTimeShade)
             }
             Section("Updates") {
                 Picker("Refresh every", selection: $settings.refreshMinutes) {

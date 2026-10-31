@@ -102,6 +102,8 @@ public struct AccountsState: Codable, Sendable {
     public var managed: [Account] = []
     /// IDs of accounts hidden from the menu bar/panel.
     public var hidden: Set<String> = []
+    /// IDs of accounts listed in the panel but left out of the menu bar title.
+    public var notInMenuBar: Set<String> = []
     /// Custom display names.
     public var renamed: [String: String] = [:]
     /// Display order (account IDs); unknown accounts go last.
@@ -115,6 +117,7 @@ public struct AccountsState: Codable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         managed = try c.decodeIfPresent([Account].self, forKey: .managed) ?? []
         hidden = try c.decodeIfPresent(Set<String>.self, forKey: .hidden) ?? []
+        notInMenuBar = try c.decodeIfPresent(Set<String>.self, forKey: .notInMenuBar) ?? []
         renamed = try c.decodeIfPresent([String: String].self, forKey: .renamed) ?? [:]
         order = try c.decodeIfPresent([String].self, forKey: .order) ?? []
         recheckedExpiredTokens = try c.decodeIfPresent(Set<String>.self, forKey: .recheckedExpiredTokens) ?? []

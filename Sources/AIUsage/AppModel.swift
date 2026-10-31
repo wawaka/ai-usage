@@ -38,6 +38,8 @@ final class AppSettings: ObservableObject {
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
     /// Show how much quota is left instead of how much is used.
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
+    /// Shade each menu bar bar with how much of its window's time has passed.
+    @Published var menuBarTimeShade: Bool { didSet { defaults.set(menuBarTimeShade, forKey: "menuBarTimeShade") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
     @Published var notifyAtLimit: Bool { didSet { defaults.set(notifyAtLimit, forKey: "notifyAtLimit") } }
     @Published var launchAtLogin: Bool {
@@ -56,6 +58,7 @@ final class AppSettings: ObservableObject {
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
         showRemaining = defaults.bool(forKey: "showRemaining")
+        menuBarTimeShade = defaults.object(forKey: "menuBarTimeShade") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -67,6 +70,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var statuses: [AccountStatus] = []
     @Published private(set) var accounts: [Account] = []
     @Published private(set) var hiddenIDs: Set<String> = []
+    /// Accounts shown in the panel but not in the menu bar title.
+    @Published private(set) var notInMenuBarIDs: Set<String> = []
     /// Keychain items whose access prompt was denied (not asked again until retried).
     @Published private(set) var deniedKeychainItems: Set<String> = []
     /// Accounts with a fetch in flight (each shows its own spinner).
@@ -153,6 +158,7 @@ final class AppModel: ObservableObject {
     func reloadAccounts() async {
         accounts = await service.allAccounts()
         hiddenIDs = await service.state.hidden
+        notInMenuBarIDs = await service.state.notInMenuBar
         deniedKeychainItems = keychain.deniedServices
     }
 
@@ -170,6 +176,11 @@ final class AppModel: ObservableObject {
                 statuses.first { $0.id == cached.id } ?? cached
             }
         }
+    }
+
+    func setInMenuBar(_ account: Account, _ shown: Bool) {
+        if shown { notInMenuBarIDs.remove(account.id) } else { notInMenuBarIDs.insert(account.id) }
+        Task { await service.setInMenuBar(account.id, shown) }
     }
 
     func rename(_ account: Account, to name: String) {

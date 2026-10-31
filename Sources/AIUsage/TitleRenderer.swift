@@ -30,7 +30,7 @@ enum TitleRenderer {
         var balanceText: String?
     }
 
-    static func segments(for statuses: [AccountStatus], remaining: Bool) -> [Segment] {
+    static func segments(for statuses: [AccountStatus], remaining: Bool, timeShade: Bool) -> [Segment] {
         let counts = Dictionary(grouping: statuses, by: \.account.provider).mapValues(\.count)
         var seen: [ProviderKind: Int] = [:]
         return statuses.map { s in
@@ -42,7 +42,7 @@ enum TitleRenderer {
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
                 let d = w.display(remaining: remaining)
-                return Bar(percent: d.percent, time: d.time)
+                return Bar(percent: d.percent, time: timeShade ? d.time : nil)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
