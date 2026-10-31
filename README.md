@@ -13,11 +13,11 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
   turns into a spinner while that account loads. Clicking the menu bar item refreshes. Each section
   has a *Menu bar* checkbox (leave the account out of the menu bar title but keep it in the list) and
   a *Hide* button (remove it from the list and stop polling it; bring it back in Accounts…).
-- **Time shade:** behind each usage bar (dropdown, and the menu bar unless turned off in Settings), a lighter shade of the same colour
-  shows how much of the window's time has passed. Usage reaching past the shade means you're using
-  quota faster than the window elapses (a thin tick marks the time when usage covers it).
+- **Usage refresh guide:** an I-shaped cursor on each usage bar (menu bar and dropdown) marks how far
+  the window has run toward its reset. Usage reaching past the cursor means you're using quota faster
+  than the window elapses. It can be turned off in Settings.
 - **Used / remaining:** *Show remaining* (dropdown, ⌘I, or Settings) inverts every number and bar to
-  quota left; the time shade then shows time left, so the comparison reads the same way.
+  quota left; the cursor then marks time left, so the comparison reads the same way.
 
 ## Accounts
 

@@ -17,7 +17,7 @@ enum TitleRenderer {
 
     struct Bar {
         var percent: Double
-        /// Fraction of the window's time elapsed (or left, when showing remaining); drawn as a lighter shade.
+        /// Fraction of the window's time elapsed (or left, when showing remaining); drawn as an I-beam cursor.
         var time: Double?
     }
 
@@ -30,7 +30,7 @@ enum TitleRenderer {
         var balanceText: String?
     }
 
-    static func segments(for statuses: [AccountStatus], remaining: Bool, timeShade: Bool) -> [Segment] {
+    static func segments(for statuses: [AccountStatus], remaining: Bool, refreshGuide: Bool) -> [Segment] {
         let counts = Dictionary(grouping: statuses, by: \.account.provider).mapValues(\.count)
         var seen: [ProviderKind: Int] = [:]
         return statuses.map { s in
@@ -42,7 +42,7 @@ enum TitleRenderer {
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
                 let d = w.display(remaining: remaining)
-                return Bar(percent: d.percent, time: timeShade ? d.time : nil)
+                return Bar(percent: d.percent, time: refreshGuide ? d.time : nil)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
@@ -98,12 +98,10 @@ enum TitleRenderer {
                                          xRadius: barRadius, yRadius: barRadius).fill()
                         }
                         capsule(barWidth, barBg)
-                        // Window time first, in a lighter shade; usage on top. Usage past the shade = ahead of pace.
-                        if let time = bar.time, time > 0 { capsule(barWidth * min(time, 1), fill.withAlphaComponent(0.38)) }
                         if bar.percent > 0 { capsule(barWidth * min(bar.percent, 100) / 100, fill) }
-                        if let time = bar.time, time > 0, time < 1, bar.percent / 100 > time {
-                            (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.7).setFill()
-                            NSRect(x: x + (barWidth * time).rounded() - 0.5, y: y, width: 1, height: barHeight).fill()
+                        // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
+                        if let time = bar.time {
+                            drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)
                         }
                         y -= barHeight + barGap
                     }
@@ -121,6 +119,26 @@ enum TitleRenderer {
         }
         image.isTemplate = false
         return image
+    }
+
+    /// I-beam cursor: a 1pt stem slightly taller than the bar with short serifs top and bottom,
+    /// outlined in the opposite tone so it stays visible over both track and fill.
+    static func drawGuide(atX gx: CGFloat, barY: CGFloat, dark: Bool) {
+        let cx = gx.rounded()
+        let overhang: CGFloat = 1, serif: CGFloat = 1.5
+        let top = barY + barHeight + overhang, bottom = barY - overhang
+        func beam() -> NSBezierPath {
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: cx, y: bottom)); p.line(to: NSPoint(x: cx, y: top))
+            p.move(to: NSPoint(x: cx - serif, y: top)); p.line(to: NSPoint(x: cx + serif, y: top))
+            p.move(to: NSPoint(x: cx - serif, y: bottom)); p.line(to: NSPoint(x: cx + serif, y: bottom))
+            p.lineCapStyle = .butt
+            return p
+        }
+        let halo = beam(); halo.lineWidth = 2.5
+        (dark ? NSColor.black : NSColor.white).withAlphaComponent(0.6).setStroke(); halo.stroke()
+        let stroke = beam(); stroke.lineWidth = 1
+        (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.9).setStroke(); stroke.stroke()
     }
 
     /// Fallback when nothing fits / nothing is configured: a gauge glyph tinted by the worst state.

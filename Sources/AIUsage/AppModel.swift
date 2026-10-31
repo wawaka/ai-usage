@@ -38,8 +38,8 @@ final class AppSettings: ObservableObject {
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
     /// Show how much quota is left instead of how much is used.
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
-    /// Shade each menu bar bar with how much of its window's time has passed.
-    @Published var menuBarTimeShade: Bool { didSet { defaults.set(menuBarTimeShade, forKey: "menuBarTimeShade") } }
+    /// Usage refresh guide: an I-beam cursor on each usage bar at the point the window's time has reached.
+    @Published var refreshGuide: Bool { didSet { defaults.set(refreshGuide, forKey: "refreshGuide") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
     @Published var notifyAtLimit: Bool { didSet { defaults.set(notifyAtLimit, forKey: "notifyAtLimit") } }
     @Published var launchAtLogin: Bool {
@@ -58,7 +58,7 @@ final class AppSettings: ObservableObject {
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
         showRemaining = defaults.bool(forKey: "showRemaining")
-        menuBarTimeShade = defaults.object(forKey: "menuBarTimeShade") as? Bool ?? true
+        refreshGuide = defaults.object(forKey: "refreshGuide") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled

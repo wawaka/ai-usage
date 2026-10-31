@@ -31,7 +31,7 @@ final class StatusItemController: NSObject {
             }
         }
 
-        Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () }, settings.$menuBarTimeShade.map { _ in () })
+        Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () }, settings.$refreshGuide.map { _ in () })
             .combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
@@ -48,8 +48,8 @@ final class StatusItemController: NSObject {
         let style = settings.titleStyle
         var mode = settings.titleMode
         let remaining = settings.showRemaining
-        let shade = settings.menuBarTimeShade
-        let all = TitleRenderer.segments(for: statuses, remaining: remaining, timeShade: shade)
+        let guide = settings.refreshGuide
+        let all = TitleRenderer.segments(for: statuses, remaining: remaining, refreshGuide: guide)
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
@@ -63,7 +63,7 @@ final class StatusItemController: NSObject {
             image = TitleRenderer.image(for: all, style: style)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, timeShade: shade), style: style)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, refreshGuide: guide), style: style)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }

@@ -35,7 +35,7 @@ struct PanelView: View {
         VStack(spacing: 0) {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
-                AccountSection(status: status, remaining: settings.showRemaining,
+                AccountSection(status: status, remaining: settings.showRemaining, refreshGuide: settings.refreshGuide,
                                refreshing: model.refreshingIDs.contains(status.id),
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
                                                   set: { model.setInMenuBar(status.account, $0) }),
@@ -100,6 +100,7 @@ struct MenuRow: View {
 struct AccountSection: View {
     let status: AccountStatus
     let remaining: Bool
+    let refreshGuide: Bool
     let refreshing: Bool
     @Binding var inMenuBar: Bool
     let hide: () -> Void
@@ -136,7 +137,7 @@ struct AccountSection: View {
             }
             if let snap = status.snapshot {
                 ForEach(Array((snap.windows + snap.extraWindows).enumerated()), id: \.offset) { _, w in
-                    WindowRow(window: w, tint: tint, remaining: remaining)
+                    WindowRow(window: w, tint: tint, remaining: remaining, refreshGuide: refreshGuide)
                 }
                 if let balance = snap.balance {
                     HStack(spacing: 8) {
@@ -180,13 +181,14 @@ struct WindowRow: View {
     let window: UsageWindow
     let tint: Color
     let remaining: Bool
+    let refreshGuide: Bool
 
     var body: some View {
         let shown = window.display(remaining: remaining)
         HStack(spacing: 8) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .frame(width: 58, alignment: .leading)
-            Meter(value: shown.percent, time: shown.time, tint: tint)
+            Meter(value: shown.percent, time: refreshGuide ? shown.time : nil, tint: tint)
                 .help(timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(tint).frame(width: 34, alignment: .trailing)
@@ -202,8 +204,8 @@ struct WindowRow: View {
     }
 }
 
-/// Usage bar with the window's time drawn behind it in a lighter shade of the same colour:
-/// usage reaching past the time shade means quota is being used faster than the window elapses.
+/// Usage bar with the usage refresh guide: an I-beam cursor where the window's time has got to.
+/// Usage reaching past the cursor means quota is being used faster than the window elapses.
 struct Meter: View {
     let value: Double
     var time: Double?
@@ -213,20 +215,30 @@ struct Meter: View {
         GeometryReader { geo in
             let w = geo.size.width
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.22))
-                if let time, time > 0 {
-                    Capsule().fill(tint.opacity(0.32)).frame(width: max(6, w * min(time, 1)))
-                }
+                Capsule().fill(Color.secondary.opacity(0.22)).frame(height: 6)
                 if value > 0 {
-                    Capsule().fill(tint).frame(width: max(6, w * min(value, 100) / 100))
+                    Capsule().fill(tint).frame(width: max(6, w * min(value, 100) / 100), height: 6)
                 }
-                // Keep the time position visible when usage covers it.
-                if let time, time > 0, time < 1, value / 100 > time {
-                    Rectangle().fill(Color.primary.opacity(0.55)).frame(width: 1.5)
-                        .offset(x: w * time - 0.75)
+                if let time {
+                    IBeam().stroke(Color(nsColor: .windowBackgroundColor).opacity(0.7), lineWidth: 3)
+                        .frame(width: 5, height: 12).offset(x: w * min(max(time, 0), 1) - 2.5)
+                    IBeam().stroke(Color.primary.opacity(0.9), lineWidth: 1.25)
+                        .frame(width: 5, height: 12).offset(x: w * min(max(time, 0), 1) - 2.5)
                 }
             }
+            .frame(height: geo.size.height)
         }
-        .frame(height: 6)
+        .frame(height: 12)
+    }
+}
+
+/// An "I": vertical stem with short serifs at both ends.
+struct IBeam: Shape {
+    func path(in r: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: r.midX, y: r.minY)); p.addLine(to: CGPoint(x: r.midX, y: r.maxY))
+        p.move(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY))
+        p.move(to: CGPoint(x: r.minX, y: r.maxY)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY))
+        return p
     }
 }
