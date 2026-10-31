@@ -35,7 +35,7 @@ The app lives only in the menu bar, with no Dock icon. To start it automatically
 
 ### Build from source
 
-With Xcode 15+ or the Command Line Tools:
+With Xcode 26+ or its Command Line Tools (Swift 6.2+):
 
 ```sh
 git clone https://github.com/wawaka/ai-usage.git && cd ai-usage

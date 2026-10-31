@@ -7,27 +7,41 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   core-linux:
-    runs-on: ubuntu-latest
-    container: swift:6.1-noble
+    name: Core tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container: swift:6.4-noble
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift test
 
   app-macos:
-    runs-on: macos-15
+    name: App (macOS)
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write   # attach the zip to the release on v* tags
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # build number = commit count
       - run: swift --version
       - run: swift test
       - run: Scripts/package_app.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: AIUsage-zip
           path: dist/*.zip
+          if-no-files-found: error
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         env:

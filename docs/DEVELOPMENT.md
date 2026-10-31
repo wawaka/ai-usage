@@ -1,6 +1,6 @@
 # Development
 
-Requires macOS 14+ and Xcode 15+ or the Command Line Tools (Swift 5.10+). Architecture notes and
+Building requires Xcode 26+ or its Command Line Tools (Swift 6.2+). The app itself runs on macOS 14+. Architecture notes and
 project rules for coding agents are in [AGENTS.md](../AGENTS.md).
 
 ## Layout

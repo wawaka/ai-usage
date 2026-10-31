@@ -2,7 +2,7 @@
 
 Guidance for coding agents (Codex, Claude Code, Cursor, …) working in this repository.
 
-AI Usage is a native macOS menu bar app (Swift 5.10 package; AppKit + SwiftUI; macOS 14+). It shows subscription and coding-plan usage for Claude, Codex, GLM, DeepSeek, MiniMax and Kimi.
+AI Usage is a native macOS menu bar app (Swift 6.2+ package; AppKit + SwiftUI; runs on macOS 14+). It shows subscription and coding-plan usage for Claude, Codex, GLM, DeepSeek, MiniMax and Kimi.
 
 ## Commands
 
@@ -19,11 +19,11 @@ python3 Scripts/embed_marks.py               # regenerate Sources/AIUsage/Provid
 Off a Mac (e.g. a Linux sandbox), only `AIUsageCore` and its tests build. Run them in Docker, and syntax-check the app sources:
 
 ```sh
-docker run --rm -v "$PWD":/src -w /src swift:6.1-noble bash -c "swift test --build-path /tmp/build"
-docker run --rm -v "$PWD":/src -w /src swift:6.1-noble swiftc -parse Sources/AIUsage/*.swift
+docker run --rm -v "$PWD":/src -w /src swift:6.4-noble bash -c "swift test --build-path /tmp/build"
+docker run --rm -v "$PWD":/src -w /src swift:6.4-noble swiftc -parse Sources/AIUsage/*.swift
 ```
 
-`Package.swift` declares the `AIUsage` app target only inside `#if os(macOS)`. CI (`.github/workflows/build.yml`) runs the core tests on Linux. On macOS it also packages the app; `v*` tags attach the zip to a release.
+`Package.swift` declares the `AIUsage` app target only inside `#if os(macOS)`. `AIUsageCore`, the CLI and the tests use the Swift 6 language mode (strict concurrency). The app target stays in Swift 5 mode, because it can't be compiled off a Mac to audit it. CI (`.github/workflows/build.yml`) runs the core tests on Linux. On macOS it also packages the app; `v*` tags attach the zip to a release.
 
 ## Architecture
 
