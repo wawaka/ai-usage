@@ -215,22 +215,36 @@ public actor UsageService {
         return status
     }
 
-    private func fetch(_ account: Account) async throws -> UsageSnapshot {
-        guard var (credential, tool) = credential(for: account) else {
-            throw UsageError.missingCredential("No credentials for \(account.label)")
+    /// Does every Keychain read the visible accounts will need, so macOS shows its access prompts
+    /// together at launch instead of one by one whenever each account's next poll comes up:
+    /// AI Usage's own items for added accounts, and a fresh read of any borrowed token that has
+    /// already expired. Sends nothing over the network.
+    public func prepareCredentials() {
+        for account in visibleAccounts() {
+            _ = credential(for: account)
+            recheckExpiredKeychainToken(account)
         }
-        // Claude Code rotates its Keychain token; re-read it only once our cached copy has expired,
-        // so macOS asks for Keychain access rarely instead of on every poll.
-        let keychainPrefix = "local:claude-code:keychain:"
-        // An expired token is re-read only once (persisted as a hash): if the owning tool isn't running,
-        // its item holds the same expired token, and asking again would only repeat the prompt.
-        if case .oauth(let t) = credential, t.isExpired(), account.id.hasPrefix(keychainPrefix),
-           state.recheckedExpiredTokens.insert(Self.fingerprint(t.accessToken)).inserted {
-            if state.recheckedExpiredTokens.count > 50 { state.recheckedExpiredTokens = [Self.fingerprint(t.accessToken)] }
-            stateStore.save(state)
-            discovery.keychain?.invalidate(service: String(account.id.dropFirst(keychainPrefix.count)))
-            rescan()
-            if let fresh = self.credential(for: account) { (credential, tool) = fresh }
+    }
+
+    private static let keychainPrefix = "local:claude-code:keychain:"
+
+    /// Claude Code rotates its Keychain token; it's re-read only once our cached copy has expired,
+    /// so macOS asks for access rarely instead of on every poll. An expired token is re-read only
+    /// once (persisted as a hash): if the owning tool isn't running, its item holds the same expired
+    /// token, and asking again would only repeat the prompt.
+    private func recheckExpiredKeychainToken(_ account: Account) {
+        guard account.id.hasPrefix(Self.keychainPrefix), case .oauth(let t)? = credential(for: account)?.0,
+              t.isExpired(), state.recheckedExpiredTokens.insert(Self.fingerprint(t.accessToken)).inserted else { return }
+        if state.recheckedExpiredTokens.count > 50 { state.recheckedExpiredTokens = [Self.fingerprint(t.accessToken)] }
+        stateStore.save(state)
+        discovery.keychain?.invalidate(service: String(account.id.dropFirst(Self.keychainPrefix.count)))
+        rescan()
+    }
+
+    private func fetch(_ account: Account) async throws -> UsageSnapshot {
+        recheckExpiredKeychainToken(account)
+        guard let (credential, tool) = credential(for: account) else {
+            throw UsageError.missingCredential("No credentials for \(account.label)")
         }
         if account.isLocal {
             // Read-only: a token borrowed from another tool is used as-is and never refreshed,

@@ -123,6 +123,9 @@ final class AppModel: ObservableObject {
             await service.rescan()
             statuses = await service.cachedStatuses()
             await reloadAccounts()
+            // Ask for all Keychain access now, even for accounts whose next poll is later.
+            await service.prepareCredentials()
+            await reloadAccounts()
             poll()
         }
         // Each account has its own adaptive schedule (UsageService); this tick only checks who is due.

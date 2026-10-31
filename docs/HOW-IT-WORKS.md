@@ -31,6 +31,9 @@ as low as possible:
   (`dev.ai-usage.borrowed`), so later launches don't need to ask.
 - **Expired tokens:** an expired token is re-read from Claude Code's item at most once, to pick up
   a renewed login. This is tracked by a hash of the token.
+- **All at launch:** every Keychain read the visible accounts need happens right at startup. That covers
+  AI Usage's own items and a fresh read of any borrowed token that has already expired. Any prompts show up
+  together then, not later when an account's next poll comes round.
 - **One attempt per run:** each item is tried at most once per run.
 - **Denials:** a denial is remembered until you press *Try again* in Accounts or turn the
   source back on in Settings.

@@ -68,6 +68,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
   - Each item is attempted once per run, and denials are persisted.
   - A borrowed token is copied into AI Usage's own item.
   - An expired borrowed token is re-read at most once ever (hash in `AccountsState.recheckedExpiredTokens`).
+  - `UsageService.prepareCredentials()` runs at launch, so all prompts appear then rather than at each account's first poll.
   - Keep these properties when touching discovery or fetch code; a regression shows up as repeated macOS access prompts.
 - **Paths:** use `AppPaths.userHome`, not `homeDirectoryForCurrentUser`, so tests can redirect `$HOME`.
 

@@ -32,6 +32,16 @@ func makeJWT(_ claims: [String: Any]) -> String {
 }
 
 /// Counts secret reads like a Keychain would (each read = one potential access prompt).
+final class CountingSecrets: SecretStore, @unchecked Sendable {
+    var items: [String: Credential] = [:]
+    var loads = 0
+    var loadsByID: [String: Int] = [:]
+    func load(_ id: String) -> Credential? { loads += 1; loadsByID[id, default: 0] += 1; return items[id] }
+    func loads(of id: String) -> Int { loadsByID[id] ?? 0 }
+    func save(_ c: Credential, for id: String) throws { items[id] = c }
+    func delete(_ id: String) { items[id] = nil }
+}
+
 final class CountingKeychain: KeychainReading, @unchecked Sendable {
     var blob: Data
     var reads = 0
@@ -177,6 +187,24 @@ final class DiscoveryTests: XCTestCase {
         let reloaded = UsageService(secrets: secrets, client: http, home: home, directory: appDir)
         let reloadedIDs = await reloaded.allAccounts().map(\.id)
         XCTAssertEqual(reloadedIDs, [a.id])
+    }
+
+    func testPrepareCredentialsDoesAllKeychainReadsUpFront() async throws {
+        let expired = #"{"claudeAiOauth":{"accessToken":"old","refreshToken":"r","expiresAt":1000}}"#
+        let keychain = CountingKeychain(Data(expired.utf8))
+        let secrets = CountingSecrets()
+        let http = MockHTTP { _ in (500, "no network during preparation") }
+        let setup = UsageService(secrets: secrets, keychain: keychain, client: http, home: home, directory: appDir)
+        let added = try await setup.addManaged(provider: .glm, label: "k", credential: .apiKey(APIKeyCredential(key: "x")))
+        secrets.loads = 0
+
+        let service = UsageService(secrets: secrets, keychain: keychain, client: http, home: home, directory: appDir)
+        await service.rescan()
+        let readsAfterScan = keychain.reads
+        await service.prepareCredentials()
+        XCTAssertEqual(secrets.loads(of: added.id), 1, "the added account's secret is read at launch, not at its first poll")
+        XCTAssertEqual(keychain.reads, readsAfterScan + 1, "the expired borrowed token is re-read at launch")
+        XCTAssertTrue(http.requests.isEmpty)
     }
 
     func testExpiredKeychainTokenIsReReadOnlyOnce() async throws {
