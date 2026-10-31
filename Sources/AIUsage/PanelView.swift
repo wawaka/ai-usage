@@ -60,7 +60,7 @@ struct PanelView: View {
 
     private var footer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            MenuRow(title: "Refresh now", shortcut: "R") { model.refresh() }
+            MenuRow(title: "Refresh all now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
             ToggleRow(title: "Show remaining", shortcut: "I", isOn: $settings.showRemaining)
             ToggleRow(title: "Usage refresh guide", shortcut: "G", isOn: $settings.refreshGuide)
@@ -140,17 +140,28 @@ struct AccountSection: View {
     private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
 
+    private var message: String? {
+        let text = status.error ?? status.analysis?.message
+        return text?.isEmpty == false ? text : nil
+    }
+
+    private var windows: [UsageWindow] { (status.snapshot?.windows ?? []) + (status.snapshot?.extraWindows ?? []) }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .center, spacing: 8) {
-                ProviderMark(provider: status.account.provider, size: 20)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .top, spacing: 8) {
+                ProviderMark(provider: status.account.provider, size: 20).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
+                    // Title on the left; per-account controls share its line on the right.
+                    HStack(alignment: .center, spacing: 6) {
                         Text(status.account.provider.displayName).font(.system(size: 14, weight: .semibold))
+                            .lineLimit(1).layoutPriority(1)
                         if let badge = state?.badge { StateBadge(text: badge, color: tint) }
                         if let plan = Format.planLabel(status.snapshot?.plan) {
-                            Text(plan).font(.system(size: 10)).foregroundStyle(.secondary)
+                            Text(plan).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                         }
+                        Spacer(minLength: 6)
+                        controls
                     }
                     if showName {
                         Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -158,42 +169,44 @@ struct AccountSection: View {
                     Text(status.account.sourceDescription).font(.system(size: 10)).foregroundStyle(.tertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
-                Spacer()
-                // Spinner while loading, otherwise the time of the last update, in the same spot.
-                ZStack(alignment: .trailing) {
-                    if refreshing {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        RefreshButton(updated: status.snapshot?.observedAt, next: status.nextRefresh, action: reload)
-                    }
-                }
-                .frame(minWidth: 20, alignment: .trailing)
             }
-            if let snap = status.snapshot {
-                ForEach(Array((snap.windows + snap.extraWindows).enumerated()), id: \.offset) { _, w in
-                    WindowRow(window: w, tint: tint, remaining: remaining, refreshGuide: refreshGuide)
-                }
-                if let balance = snap.balance {
-                    HStack(spacing: 8) {
-                        Text("Balance").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                            .frame(width: 58, alignment: .leading)
-                        Text(balance.formatted).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(tint)
-                    }
+            let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
+            ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
+                WindowRow(window: w, tint: tint, remaining: remaining, refreshGuide: refreshGuide, labelWidth: labelWidth)
+            }
+            if let balance = status.snapshot?.balance {
+                HStack(spacing: 6) {
+                    Text("Balance").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                    Text(balance.formatted).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(tint)
                 }
             }
-            HStack(alignment: .center, spacing: 10) {
-                Text(status.error ?? status.analysis?.message ?? "")
+            if let message {
+                Text(message)
                     .font(.system(size: 11))
                     .foregroundStyle(status.error != nil ? Color(nsColor: Theme.alert) : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 8)
-                Toggle("Menu bar", isOn: $inMenuBar)
-                    .toggleStyle(.checkbox).controlSize(.small).font(.system(size: 11))
-                    .help("Show this account in the menu bar title")
-                Button("Hide", action: hide)
-                    .buttonStyle(.link).controlSize(.small).font(.system(size: 11))
-                    .help("Hide from the list (bring it back in Accounts…)")
             }
+        }
+    }
+
+    /// Menu bar checkbox, Hide, and the data age / refresh button (a spinner while loading).
+    private var controls: some View {
+        HStack(spacing: 8) {
+            Toggle("Menu bar", isOn: $inMenuBar)
+                .toggleStyle(.checkbox).controlSize(.small).font(.system(size: 11)).fixedSize()
+                .help("Show this account in the menu bar title")
+            Button("Hide", action: hide)
+                .buttonStyle(.link).controlSize(.small).font(.system(size: 11)).fixedSize()
+                .help("Hide from the list (bring it back in Accounts…)")
+            ZStack(alignment: .trailing) {
+                if refreshing {
+                    ProgressView().controlSize(.small)
+                } else {
+                    RefreshButton(updated: status.snapshot?.observedAt, next: status.nextRefresh, action: reload)
+                }
+            }
+            .frame(minWidth: 20, alignment: .trailing)
+            .fixedSize()
         }
     }
 }
@@ -247,18 +260,21 @@ struct WindowRow: View {
     let tint: Color
     let remaining: Bool
     let refreshGuide: Bool
+    /// Same for every row of an account, so their bars line up.
+    var labelWidth: CGFloat = 20
 
     var body: some View {
         let shown = window.display(remaining: remaining)
-        HStack(spacing: 8) {
+        // The bar takes all the width between the label and the percent + time-left columns.
+        HStack(spacing: 6) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
-                .frame(width: 58, alignment: .leading)
+                .lineLimit(1).frame(width: labelWidth, alignment: .leading)
             Meter(value: shown.percent, time: refreshGuide ? shown.time : nil, tint: tint)
                 .help(timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(tint).frame(width: 34, alignment: .trailing)
             Text(Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
-                .frame(width: 104, alignment: .trailing)
+                .lineLimit(1).frame(width: 48, alignment: .trailing)
                 .help(Format.reset(window.resetsAt))
         }
     }
