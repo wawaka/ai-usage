@@ -4,6 +4,9 @@ A native macOS menu bar app (Swift, AppKit + SwiftUI) that shows subscription an
 usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its look is modelled on
 [coding-usage-bar](https://github.com/hanzhangzzz/coding-usage-bar):
 
+<p align="center"><img src="docs/screenshot.png" width="383" alt="AI Usage: menu bar bars for Codex and Claude, and the dropdown with 5h/7d meters, refresh guide cursors and settings switches"></p>
+
+
 - **Menu bar:** each account gets a provider mark and two stacked bars (5h on top, 7d below),
   coloured by usage: green below 70%, amber from 70%, coral at 90%+. Accounts are separated by thin dividers. Optionally the bars can show
   percentages, or be replaced by them.
