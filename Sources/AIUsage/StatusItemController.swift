@@ -31,7 +31,8 @@ final class StatusItemController: NSObject {
             }
         }
 
-        Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () }, settings.$refreshGuide.map { _ in () })
+        Publishers.CombineLatest4(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () },
+                                  settings.$refreshGuide.map { _ in () }, settings.$showAccountNames.map { _ in () })
             .combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
@@ -81,7 +82,8 @@ final class StatusItemController: NSObject {
                 "\($0.label) \(Format.percent($0.display(remaining: remaining).percent))\(remaining ? " left" : "")"
             }.joined(separator: ", ")
             let value = s.snapshot?.balance?.formatted ?? windows
-            return "\(s.account.provider.displayName) · \(s.account.label): \(s.error == nil ? value : "error")"
+            let name = settings.showAccountNames ? " · \(s.account.label)" : ""
+            return "\(s.account.provider.displayName)\(name): \(s.error == nil ? value : "error")"
         }.joined(separator: "\n")
     }
 

@@ -44,6 +44,8 @@ final class AppSettings: ObservableObject {
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
     /// Show how much quota is left instead of how much is used.
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
+    /// Account names (usually emails) in the dropdown, menu bar tooltip and notifications.
+    @Published var showAccountNames: Bool { didSet { defaults.set(showAccountNames, forKey: "showAccountNames") } }
     /// Usage refresh guide: an I-beam cursor on each usage bar at the point the window's time has reached.
     @Published var refreshGuide: Bool { didSet { defaults.set(refreshGuide, forKey: "refreshGuide") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
@@ -65,6 +67,7 @@ final class AppSettings: ObservableObject {
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
         showRemaining = defaults.bool(forKey: "showRemaining")
+        showAccountNames = defaults.object(forKey: "showAccountNames") as? Bool ?? true
         refreshGuide = defaults.object(forKey: "refreshGuide") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
@@ -247,7 +250,7 @@ final class AppModel: ObservableObject {
             let content = UNMutableNotificationContent()
             content.title = "\(status.account.provider.displayName) usage is close to the limit"
             let pct = Format.bindingPercent(status.snapshot).map(Format.percent) ?? ""
-            content.body = "\(status.account.label) \(pct)".trimmingCharacters(in: .whitespaces)
+            content.body = "\(settings.showAccountNames ? status.account.label : "") \(pct)".trimmingCharacters(in: .whitespaces)
             let request = UNNotificationRequest(identifier: "limit-\(status.id)", content: content, trigger: nil)
             let center = UNUserNotificationCenter.current()
             center.requestAuthorization(options: [.alert, .sound]) { granted, _ in

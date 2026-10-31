@@ -16,6 +16,8 @@ usage for **Claude, Codex, GLM (Zhipu / Z.ai), DeepSeek, MiniMax and Kimi**. Its
 - **Usage refresh guide:** an I-shaped cursor on each usage bar (menu bar and dropdown) marks how far
   the window has run toward its reset. Usage reaching past the cursor means you're using quota faster
   than the window elapses. Toggle it from the dropdown (⌘G) or in Settings.
+- **Dropdown switches:** *Show remaining* (⌘I), *Usage refresh guide* (⌘G) and *Account names* (⌘N, hides
+  emails in the dropdown, tooltip and notifications) are real switches at the bottom of the dropdown, mirrored in Settings.
 - **Used / remaining:** *Show remaining* (dropdown, ⌘I, or Settings) inverts every number and bar to
   quota left; the cursor then marks time left, so the comparison reads the same way.
 

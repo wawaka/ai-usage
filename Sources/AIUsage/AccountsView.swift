@@ -281,6 +281,7 @@ struct SettingsView: View {
                 Text("Each account is checked at the shorter interval while its usage changes. Each check that finds the same numbers doubles the wait, up to the longer one. Rate-limited (HTTP 429) accounts wait as long as the provider asks.")
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining quota instead of used", isOn: $settings.showRemaining)
+                Toggle("Show account names", isOn: $settings.showAccountNames)
                 Toggle("Notify when an account nears its limit", isOn: $settings.notifyAtLimit)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }

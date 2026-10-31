@@ -36,6 +36,7 @@ struct PanelView: View {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
                 AccountSection(status: status, remaining: settings.showRemaining, refreshGuide: settings.refreshGuide,
+                               showName: settings.showAccountNames,
                                refreshing: model.refreshingIDs.contains(status.id),
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
                                                   set: { model.setInMenuBar(status.account, $0) }),
@@ -61,10 +62,10 @@ struct PanelView: View {
         VStack(alignment: .leading, spacing: 0) {
             MenuRow(title: "Refresh now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
-            MenuRow(title: settings.showRemaining ? "Show used" : "Show remaining", shortcut: "I") { settings.showRemaining.toggle() }
-                .keyboardShortcut("i")
-            MenuRow(title: settings.refreshGuide ? "Hide usage refresh guide" : "Show usage refresh guide", shortcut: "G") { settings.refreshGuide.toggle() }
-                .keyboardShortcut("g")
+            ToggleRow(title: "Show remaining", shortcut: "I", isOn: $settings.showRemaining)
+            ToggleRow(title: "Usage refresh guide", shortcut: "G", isOn: $settings.refreshGuide)
+            ToggleRow(title: "Account names", shortcut: "N", isOn: $settings.showAccountNames)
+            Divider().padding(.vertical, 4).padding(.horizontal, 8)
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)
             MenuRow(title: "Settings…", shortcut: ",", action: actions.openSettings)
                 .keyboardShortcut(",")
@@ -100,10 +101,37 @@ struct MenuRow: View {
     }
 }
 
+/// A setting in the dropdown: label, shortcut hint and a switch. Clicking anywhere on the row
+/// (or pressing ⌘<shortcut>) flips it.
+struct ToggleRow: View {
+    let title: String
+    let shortcut: Character
+    @Binding var isOn: Bool
+    @StateObject private var hover = Flag()
+
+    var body: some View {
+        HStack {
+            Text(title)
+            Spacer()
+            Text("⌘\(String(shortcut))").foregroundStyle(.tertiary)
+            Toggle(title, isOn: $isOn).toggleStyle(.switch).controlSize(.mini).labelsHidden()
+        }
+        .font(.system(size: 13))
+        .padding(.horizontal, 8).padding(.vertical, 3)
+        .contentShape(Rectangle())
+        .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(hover.value ? 0.06 : 0)))
+        .onTapGesture { isOn.toggle() }
+        .onHover { hover.value = $0 }
+        // Invisible button that carries the keyboard shortcut.
+        .background(Button(title) { isOn.toggle() }.keyboardShortcut(KeyEquivalent(shortcut)).opacity(0).allowsHitTesting(false))
+    }
+}
+
 struct AccountSection: View {
     let status: AccountStatus
     let remaining: Bool
     let refreshGuide: Bool
+    let showName: Bool
     let refreshing: Bool
     @Binding var inMenuBar: Bool
     let hide: () -> Void
@@ -124,7 +152,9 @@ struct AccountSection: View {
                             Text(plan).font(.system(size: 10)).foregroundStyle(.secondary)
                         }
                     }
-                    Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    if showName {
+                        Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    }
                     Text(status.account.sourceDescription).font(.system(size: 10)).foregroundStyle(.tertiary)
                         .lineLimit(1).truncationMode(.middle)
                 }
