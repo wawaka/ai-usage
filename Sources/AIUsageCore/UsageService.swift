@@ -66,8 +66,6 @@ public actor UsageService {
 
     public func visibleAccounts() -> [Account] { allAccounts().filter { !state.hidden.contains($0.id) } }
 
-    public func isHidden(_ id: String) -> Bool { state.hidden.contains(id) }
-
     public func setHidden(_ id: String, _ hidden: Bool) {
         if hidden { state.hidden.insert(id) } else { state.hidden.remove(id) }
         stateStore.save(state)
@@ -80,11 +78,6 @@ public actor UsageService {
 
     public func rename(_ id: String, to name: String?) {
         state.renamed[id] = (name?.isEmpty ?? true) ? nil : name
-        stateStore.save(state)
-    }
-
-    public func setOrder(_ ids: [String]) {
-        state.order = ids
         stateStore.save(state)
     }
 

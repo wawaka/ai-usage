@@ -86,7 +86,6 @@ final class AppModel: ObservableObject {
     @Published private(set) var deniedKeychainItems: Set<String> = []
     /// Accounts with a fetch in flight (each shows its own spinner).
     @Published private(set) var refreshingIDs: Set<String> = []
-    @Published private(set) var lastRefresh: Date?
 
     let settings: AppSettings
     let service: UsageService
@@ -181,7 +180,6 @@ final class AppModel: ObservableObject {
                 refreshingIDs.remove(account.id)
                 if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
                 notifyIfNeeded([status])
-                if refreshingIDs.isEmpty { lastRefresh = Date() }
             }
         }
     }

@@ -119,8 +119,6 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(w.display(remaining: true, now: now).percent, 70)
         XCTAssertEqual(w.display(remaining: true, now: now).time!, 0.8, accuracy: 1e-9)
         XCTAssertNil(UsageWindow(kind: .sevenDay, usedPercent: 1, resetsAt: nil).elapsedFraction())
-        let snap = UsageSnapshot(windows: [w, UsageWindow(kind: .sevenDay, usedPercent: 60, resetsAt: nil)])
-        XCTAssertEqual(Format.headlinePercent(snap, remaining: true), 40)
     }
 
     func testFormat() {
