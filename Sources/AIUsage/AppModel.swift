@@ -45,8 +45,6 @@ final class AppSettings: ObservableObject {
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
     /// Account names (usually emails) in the dropdown and menu bar tooltip.
     @Published var showAccountNames: Bool { didSet { defaults.set(showAccountNames, forKey: "showAccountNames") } }
-    /// Usage refresh guide: an I-beam cursor on each usage bar at the point the window's time has reached.
-    @Published var refreshGuide: Bool { didSet { defaults.set(refreshGuide, forKey: "refreshGuide") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
     @Published var launchAtLogin: Bool {
         didSet {
@@ -66,7 +64,6 @@ final class AppSettings: ObservableObject {
         titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
         showRemaining = defaults.bool(forKey: "showRemaining")
         showAccountNames = defaults.object(forKey: "showAccountNames") as? Bool ?? true
-        refreshGuide = defaults.object(forKey: "refreshGuide") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }

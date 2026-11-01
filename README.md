@@ -64,7 +64,6 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 
 **Customising.** The switches at the bottom of the dropdown cover the common options:
 - **Show remaining** (⌘I): quota left instead of used.
-- **Usage refresh guide** (⌘G): the `I` cursors.
 - **Account names** (⌘N): hide emails, e.g. for screenshots.
 
 **Per account:**

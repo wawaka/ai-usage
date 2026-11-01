@@ -35,8 +35,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             }
         }
 
-        Publishers.CombineLatest4(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () },
-                                  settings.$refreshGuide.map { _ in () }, settings.$showAccountNames.map { _ in () })
+        Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () },
+                                  settings.$showAccountNames.map { _ in () })
             .combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
@@ -59,8 +59,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let style = settings.titleStyle
         var mode = settings.titleMode
         let remaining = settings.showRemaining
-        let guide = settings.refreshGuide
-        let all = TitleRenderer.segments(for: statuses, remaining: remaining, refreshGuide: guide)
+        let all = TitleRenderer.segments(for: statuses, remaining: remaining)
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
@@ -74,7 +73,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             image = TitleRenderer.image(for: all, style: style)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, refreshGuide: guide), style: style)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining), style: style)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }

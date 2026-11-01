@@ -35,7 +35,7 @@ struct PanelView: View {
         VStack(spacing: 0) {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
-                AccountSection(status: status, remaining: settings.showRemaining, refreshGuide: settings.refreshGuide,
+                AccountSection(status: status, remaining: settings.showRemaining,
                                showName: settings.showAccountNames,
                                refreshing: model.refreshingIDs.contains(status.id),
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
@@ -63,7 +63,6 @@ struct PanelView: View {
             MenuRow(title: "Refresh all now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
             ToggleRow(title: "Show remaining", shortcut: "I", isOn: $settings.showRemaining)
-            ToggleRow(title: "Usage refresh guide", shortcut: "G", isOn: $settings.refreshGuide)
             ToggleRow(title: "Account names", shortcut: "N", isOn: $settings.showAccountNames)
             Divider().padding(.vertical, 4).padding(.horizontal, 8)
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)
@@ -130,7 +129,6 @@ struct ToggleRow: View {
 struct AccountSection: View {
     let status: AccountStatus
     let remaining: Bool
-    let refreshGuide: Bool
     let showName: Bool
     let refreshing: Bool
     @Binding var inMenuBar: Bool
@@ -172,7 +170,7 @@ struct AccountSection: View {
             }
             let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
-                WindowRow(window: w, tint: tint, remaining: remaining, refreshGuide: refreshGuide, labelWidth: labelWidth)
+                WindowRow(window: w, tint: tint, remaining: remaining, labelWidth: labelWidth)
             }
             if let balance = status.snapshot?.balance {
                 HStack(spacing: 6) {
@@ -259,7 +257,6 @@ struct WindowRow: View {
     let window: UsageWindow
     let tint: Color
     let remaining: Bool
-    let refreshGuide: Bool
     /// Same for every row of an account, so their bars line up.
     var labelWidth: CGFloat = 20
 
@@ -272,7 +269,7 @@ struct WindowRow: View {
         HStack(spacing: 6) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: labelWidth, alignment: .leading)
-            Meter(value: shown.percent, time: refreshGuide ? shown.time : nil, tint: idle ? Color.secondary.opacity(0.5) : tint)
+            Meter(value: shown.percent, time: shown.time, tint: idle ? Color.secondary.opacity(0.5) : tint)
                 .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(color).frame(width: 34, alignment: .trailing)

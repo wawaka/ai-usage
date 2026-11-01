@@ -266,10 +266,8 @@ struct SettingsView: View {
                 Picker("Style", selection: $settings.titleStyle) {
                     ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
                 }
-                Toggle(isOn: $settings.refreshGuide) {
-                    Text("Usage refresh guide")
-                    Text("An I-shaped cursor on each usage bar marks how far the window has run toward its reset. Usage past the cursor means you're ahead of pace.")
-                }
+                Text("An I-shaped cursor on each usage bar marks how far the window has run toward its reset. Usage past the cursor means you're ahead of pace.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Updates") {
                 Picker("Check at most every", selection: $settings.pollMinMinutes) {
