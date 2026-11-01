@@ -4,7 +4,7 @@ import Combine
 import SwiftUI
 
 @MainActor
-final class StatusItemController: NSObject {
+final class StatusItemController: NSObject, NSPopoverDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let popover = NSPopover()
     private let model: AppModel
@@ -13,6 +13,8 @@ final class StatusItemController: NSObject {
     private var appearanceObservation: NSKeyValueObservation?
     private var eventMonitor: Any?
     private var clockTimer: Timer?
+    /// Invisible window the popover is anchored to, so it stays put when the menu bar item resizes.
+    private var anchorWindow: NSWindow?
 
     init(model: AppModel, settings: AppSettings, actions: PanelActions) {
         self.model = model
@@ -21,6 +23,7 @@ final class StatusItemController: NSObject {
 
         popover.behavior = .transient
         popover.animates = false
+        popover.delegate = self
         popover.contentViewController = NSHostingController(rootView: PanelView(model: model, settings: settings, actions: actions))
 
         if let button = item.button {
@@ -97,9 +100,21 @@ final class StatusItemController: NSObject {
     @objc private func togglePopover(_ sender: Any?) {
         if popover.isShown {
             closePopover()
-        } else if let button = item.button {
+        } else if let button = item.button, let buttonWindow = button.window {
             NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // The popover follows its anchor view, and the status item changes width (e.g. when an
+            // account is toggled in the menu bar). Anchor it to a fixed copy of the button's frame.
+            let frame = buttonWindow.convertToScreen(button.convert(button.bounds, to: nil))
+            let anchor = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+            anchor.isOpaque = false
+            anchor.backgroundColor = .clear
+            anchor.hasShadow = false
+            anchor.ignoresMouseEvents = true
+            anchor.level = buttonWindow.level
+            anchor.contentView = NSView(frame: NSRect(origin: .zero, size: frame.size))
+            anchor.orderFrontRegardless()
+            anchorWindow = anchor
+            popover.show(relativeTo: anchor.contentView!.bounds, of: anchor.contentView!, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
                 Task { @MainActor in self?.closePopover() }
@@ -109,7 +124,15 @@ final class StatusItemController: NSObject {
 
     func closePopover() {
         popover.performClose(nil)
+        cleanUpAfterPopover()
+    }
+
+    func popoverDidClose(_ notification: Notification) { cleanUpAfterPopover() }
+
+    private func cleanUpAfterPopover() {
         if let eventMonitor { NSEvent.removeMonitor(eventMonitor) }
         eventMonitor = nil
+        anchorWindow?.orderOut(nil)
+        anchorWindow = nil
     }
 }
