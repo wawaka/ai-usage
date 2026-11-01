@@ -51,6 +51,7 @@ public enum Format {
 
     public static func planLabel(_ raw: String?) -> String? {
         guard let raw, !raw.isEmpty else { return nil }
-        return raw.replacingOccurrences(of: "claude_", with: "").replacingOccurrences(of: "_", with: " ").capitalized
+        let words = raw.replacingOccurrences(of: "claude_", with: "").split(whereSeparator: { $0 == "_" || $0 == " " })
+        return words.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }.joined(separator: " ")
     }
 }

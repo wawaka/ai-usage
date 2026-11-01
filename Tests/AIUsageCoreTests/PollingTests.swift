@@ -70,7 +70,7 @@ final class PollingTests: XCTestCase {
         http.next = Self.usage(5)
         let after = await service.refresh(account, now: t0.addingTimeInterval(901))
         XCTAssertNil(after.error)
-        XCTAssertEqual(http.count, 2)
+        XCTAssertEqual(http.count, 3, "the usage request plus the one-time plan lookup")
     }
 
     func testRateLimitSignals() {
@@ -96,5 +96,21 @@ extension PollingTests {
         let dueLater = await relaunched.dueAccounts(now: t0.addingTimeInterval(61)).map(\.id)
         XCTAssertEqual(dueEarly, [], "a relaunch doesn't refetch before the interval has passed")
         XCTAssertEqual(dueLater, [account.id])
+    }
+
+    func testClaudePlanComesFromProfileOnceAndIsKept() async throws {
+        let http = MockHTTP { req in
+            if req.url?.path.hasSuffix("/profile") == true {
+                return (200, #"{"account":{"email":"a@b.c"},"organization":{"organization_type":"claude_max","rate_limit_tier":"default_claude_max_5x"}}"#)
+            }
+            return (200, #"{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":1,"resets_at":null}}"#)
+        }
+        let (service, account) = try await makeService(http)
+        let first = await service.refresh(account)
+        XCTAssertEqual(Format.planLabel(first.snapshot?.plan), "Max 5x")
+        let second = await service.refresh(account, now: Date().addingTimeInterval(500))
+        XCTAssertEqual(Format.planLabel(second.snapshot?.plan), "Max 5x")
+        let profileCalls = http.requests.filter { $0.url?.path.hasSuffix("/profile") == true }.count
+        XCTAssertEqual(profileCalls, 1, "profile is asked once, not on every poll")
     }
 }

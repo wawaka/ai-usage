@@ -11,7 +11,7 @@ public enum UsageState: String, Codable, Sendable {
     public var badge: String? {
         switch self {
         case .normal: return nil
-        case .high: return "High"
+        case .high: return nil
         case .limit: return "Limit"
         case .balance: return "Balance"
         case .depleted: return "Depleted"
@@ -46,7 +46,7 @@ public struct UsageAnalysis: Codable, Equatable, Sendable {
                 : UsageAnalysis(state: .depleted, message: "Balance depleted")
         }
         let peak = snapshot.windows.map(\.usedPercent).max() ?? 0
-        if peak >= UsageState.limitThreshold { return UsageAnalysis(state: .limit, message: "Close to a plan limit.") }
+        if peak >= UsageState.limitThreshold { return UsageAnalysis(state: .limit) }
         if peak >= UsageState.highThreshold { return UsageAnalysis(state: .high) }
         return UsageAnalysis(state: .normal)
     }

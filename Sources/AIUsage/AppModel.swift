@@ -2,7 +2,6 @@ import AIUsageCore
 import AppKit
 import Combine
 import ServiceManagement
-@preconcurrency import UserNotifications
 
 enum TitleMode: String, CaseIterable, Identifiable {
     case auto, full, single, icon
@@ -44,12 +43,11 @@ final class AppSettings: ObservableObject {
     @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
     /// Show how much quota is left instead of how much is used.
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
-    /// Account names (usually emails) in the dropdown, menu bar tooltip and notifications.
+    /// Account names (usually emails) in the dropdown and menu bar tooltip.
     @Published var showAccountNames: Bool { didSet { defaults.set(showAccountNames, forKey: "showAccountNames") } }
     /// Usage refresh guide: an I-beam cursor on each usage bar at the point the window's time has reached.
     @Published var refreshGuide: Bool { didSet { defaults.set(refreshGuide, forKey: "refreshGuide") } }
     @Published var readClaudeKeychain: Bool { didSet { defaults.set(readClaudeKeychain, forKey: "readClaudeKeychain") } }
-    @Published var notifyAtLimit: Bool { didSet { defaults.set(notifyAtLimit, forKey: "notifyAtLimit") } }
     @Published var launchAtLogin: Bool {
         didSet {
             guard launchAtLogin != (SMAppService.mainApp.status == .enabled) else { return }
@@ -70,7 +68,6 @@ final class AppSettings: ObservableObject {
         showAccountNames = defaults.object(forKey: "showAccountNames") as? Bool ?? true
         refreshGuide = defaults.object(forKey: "refreshGuide") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
-        notifyAtLimit = defaults.object(forKey: "notifyAtLimit") as? Bool ?? true
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 }
@@ -92,7 +89,6 @@ final class AppModel: ObservableObject {
     let keychain: SystemKeychainReader
     private var timer: Timer?
     private var cancellables: Set<AnyCancellable> = []
-    private var alerted: Set<String> = []
 
     init(settings: AppSettings) {
         self.settings = settings
@@ -182,7 +178,6 @@ final class AppModel: ObservableObject {
                 let status = await service.refresh(account)
                 refreshingIDs.remove(account.id)
                 if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
-                notifyIfNeeded([status])
             }
         }
     }
@@ -235,27 +230,5 @@ final class AppModel: ObservableObject {
         try await service.addManaged(provider: provider, label: label, credential: credential)
         await reloadAccounts()
         refresh()
-    }
-
-    // MARK: Notifications
-
-    private func notifyIfNeeded(_ result: [AccountStatus]) {
-        // UNUserNotificationCenter requires a real app bundle (not `swift run`).
-        guard settings.notifyAtLimit, Bundle.main.bundleIdentifier != nil else { return }
-        for status in result {
-            let atLimit = status.analysis?.state == .limit || status.analysis?.state == .depleted
-            if !atLimit { alerted.remove(status.id); continue }
-            guard !alerted.contains(status.id) else { continue }
-            alerted.insert(status.id)
-            let content = UNMutableNotificationContent()
-            content.title = "\(status.account.provider.displayName) usage is close to the limit"
-            let pct = Format.bindingPercent(status.snapshot).map(Format.percent) ?? ""
-            content.body = "\(settings.showAccountNames ? status.account.label : "") \(pct)".trimmingCharacters(in: .whitespaces)
-            let request = UNNotificationRequest(identifier: "limit-\(status.id)", content: content, trigger: nil)
-            let center = UNUserNotificationCenter.current()
-            center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                if granted { center.add(request) }
-            }
-        }
     }
 }

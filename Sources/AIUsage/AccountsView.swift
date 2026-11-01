@@ -282,7 +282,6 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show remaining quota instead of used", isOn: $settings.showRemaining)
                 Toggle("Show account names", isOn: $settings.showAccountNames)
-                Toggle("Notify when an account nears its limit", isOn: $settings.notifyAtLimit)
                 Toggle("Launch at login", isOn: $settings.launchAtLogin)
             }
             Section {

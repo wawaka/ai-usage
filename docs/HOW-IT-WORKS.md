@@ -75,7 +75,6 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
   It's drawn as a plain grey bar, with no countdown and no refresh guide.
 - **Usage refresh guide:** the cursor sits at the fraction of the window's time that has elapsed,
   or remained when *Show remaining* is on.
-- **Notifications** are sent once when an account reaches 90% or its balance runs out.
 
 ## Files AI Usage writes
 

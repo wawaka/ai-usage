@@ -30,7 +30,19 @@ public enum Claude {
 
     public static func fetch(token: OAuthToken, client: HTTPClient) async throws -> UsageSnapshot {
         let obj = try await HTTP.json(client, HTTP.request(usageURL, headers: headers(token)))
-        return try parse(obj)
+        var snapshot = try parse(obj)
+        snapshot.plan = token.plan
+        return snapshot
+    }
+
+    /// Plan id for `Format.planLabel`: "max_5x" / "max_20x" from the rate-limit tier, else the subscription
+    /// type ("pro", "max", "team", "claude_max"…).
+    public static func planName(subscription: String?, tier: String?) -> String? {
+        if let tier, let m = tier.lowercased().range(of: #"max_\d+x"#, options: .regularExpression) {
+            return String(tier.lowercased()[m])
+        }
+        guard let subscription, !subscription.isEmpty else { return nil }
+        return subscription.lowercased()
     }
 
     public static func parse(_ obj: [String: Any], now: Date = Date()) throws -> UsageSnapshot {
@@ -52,8 +64,8 @@ public enum Claude {
         guard let obj = try? await HTTP.json(client, HTTP.request(profileURL, headers: headers(token))) else { return (nil, nil) }
         let account = dict(obj["account"])
         let email = string(account?["email"]) ?? string(account?["email_address"])
-        let plan = string(dict(obj["organization"])?["organization_type"])
-        return (email, plan)
+        let org = dict(obj["organization"])
+        return (email, planName(subscription: string(org?["organization_type"]), tier: string(org?["rate_limit_tier"])))
     }
 }
 

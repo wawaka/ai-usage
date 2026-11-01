@@ -16,7 +16,6 @@ A native macOS menu bar app that shows how much of your AI coding subscriptions 
 - **More accounts:** you can sign in to more accounts, including several for the same provider, or add API keys.
 - **Gentle polling:** checks back less often while usage doesn't change, and backs off when a
   provider asks it to slow down.
-- **Notifications** when an account nears its limit.
 
 ## Install
 
@@ -75,7 +74,6 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 **Settings also has:**
 - the menu bar layout (all accounts, most urgent only, or just an icon) and style (bars, percentages, or both)
 - how often to check
-- notifications
 
 ## Privacy
 

@@ -241,6 +241,21 @@ public actor UsageService {
         rescan()
     }
 
+    /// Accounts whose plan was already looked up this run (a failed lookup isn't retried every poll).
+    private var planLookups: Set<String> = []
+
+    /// Usage plus, when the provider's usage endpoint doesn't say, the plan: kept from the previous
+    /// snapshot, else asked once from Claude's profile endpoint.
+    private func fetchUsage(_ account: Account, _ credential: Credential) async throws -> UsageSnapshot {
+        var snapshot = try await UsageFetcher.fetch(account.provider, credential: credential, client: client)
+        if snapshot.plan == nil { snapshot.plan = lastSnapshots[account.id]?.plan }
+        if snapshot.plan == nil, account.provider == .claude, case .oauth(let token) = credential,
+           planLookups.insert(account.id).inserted {
+            snapshot.plan = await Claude.profile(token: token, client: client).plan
+        }
+        return snapshot
+    }
+
     private func fetch(_ account: Account) async throws -> UsageSnapshot {
         recheckExpiredKeychainToken(account)
         guard let (credential, tool) = credential(for: account) else {
@@ -253,24 +268,24 @@ public actor UsageService {
                 throw UsageError.expiredLocalToken(tool ?? "the owning tool")
             }
             do {
-                return try await UsageFetcher.fetch(account.provider, credential: credential, client: client)
+                return try await fetchUsage(account, credential)
             } catch UsageError.unauthorized {
                 throw UsageError.expiredLocalToken(tool ?? "the owning tool")
             }
         }
         guard case .oauth(var token) = credential, let oauth = OAuthProviders.forProvider(account.provider) else {
-            return try await UsageFetcher.fetch(account.provider, credential: credential, client: client)
+            return try await fetchUsage(account, credential)
         }
         if token.isExpired() {
             token = try await oauth.refresh(token, client: client)
             try secrets.save(.oauth(token), for: account.id)
         }
         do {
-            return try await UsageFetcher.fetch(account.provider, credential: .oauth(token), client: client)
+            return try await fetchUsage(account, .oauth(token))
         } catch UsageError.unauthorized {
             token = try await oauth.refresh(token, client: client)
             try secrets.save(.oauth(token), for: account.id)
-            return try await UsageFetcher.fetch(account.provider, credential: .oauth(token), client: client)
+            return try await fetchUsage(account, .oauth(token))
         }
     }
 }

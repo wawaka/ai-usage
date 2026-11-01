@@ -86,7 +86,7 @@ final class DiscoveryTests: XCTestCase {
 
     func populate() throws {
         let future = Int(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)
-        try write(".claude/.credentials.json", #"{"claudeAiOauth":{"accessToken":"claude-main","refreshToken":"r1","expiresAt":\#(future)}}"#)
+        try write(".claude/.credentials.json", #"{"claudeAiOauth":{"accessToken":"claude-main","refreshToken":"r1","expiresAt":\#(future),"subscriptionType":"max","rateLimitTier":"default_claude_max_5x"}}"#)
         try write(".claude.json", #"{"oauthAccount":{"emailAddress":"me@example.com"}}"#)
         try write(".claude-work/.credentials.json", #"{"claudeAiOauth":{"accessToken":"claude-work","refreshToken":"r2","expiresAt":1000}}"#)
         try write(".claude/settings.json", #"{"env":{"ANTHROPIC_BASE_URL":"https://open.bigmodel.cn/api/anthropic","ANTHROPIC_AUTH_TOKEN":"glm-key"}}"#)
@@ -110,6 +110,8 @@ final class DiscoveryTests: XCTestCase {
         let byProvider = Dictionary(grouping: found, by: \.account.provider)
         XCTAssertEqual(byProvider[.claude]?.count, 2, "OpenCode copy of the same Claude token is deduped")
         XCTAssertEqual(byProvider[.claude]?.first?.account.label, "me@example.com")
+        guard case .oauth(let claudeToken) = byProvider[.claude]!.first!.credential else { return XCTFail() }
+        XCTAssertEqual(claudeToken.plan, "max_5x")
         XCTAssertEqual(byProvider[.codex]?.first?.account.label, "codex@example.com")
         guard case .oauth(let codexToken) = byProvider[.codex]!.first!.credential else { return XCTFail() }
         XCTAssertEqual(codexToken.accountId, "acct-1")

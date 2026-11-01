@@ -158,7 +158,7 @@ struct AccountSection: View {
                             .lineLimit(1).layoutPriority(1)
                         if let badge = state?.badge { StateBadge(text: badge, color: tint) }
                         if let plan = Format.planLabel(status.snapshot?.plan) {
-                            Text(plan).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                            StateBadge(text: plan, color: .secondary).lineLimit(1)
                         }
                         Spacer(minLength: 6)
                         controls

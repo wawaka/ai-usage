@@ -95,7 +95,8 @@ public struct LocalDiscovery: Sendable {
 
     func claudeToken(_ blob: [String: Any]?) -> OAuthToken? {
         guard let o = dict(blob?["claudeAiOauth"]), let access = string(o["accessToken"]) else { return nil }
-        return OAuthToken(accessToken: access, refreshToken: string(o["refreshToken"]), expiresAt: parseEpoch(o["expiresAt"]))
+        return OAuthToken(accessToken: access, refreshToken: string(o["refreshToken"]), expiresAt: parseEpoch(o["expiresAt"]),
+                          plan: Claude.planName(subscription: string(o["subscriptionType"]), tier: string(o["rateLimitTier"])))
     }
 
     func claudeCode() -> [DiscoveredCredential] {

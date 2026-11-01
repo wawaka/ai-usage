@@ -106,6 +106,7 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(UsageAnalysis.of(snap(10, 40)).state, .normal)
         XCTAssertNil(UsageState.normal.badge)
         XCTAssertEqual(UsageAnalysis.of(snap(10, 70)).state, .high)
+        XCTAssertNil(UsageState.high.badge)
         XCTAssertEqual(UsageAnalysis.of(snap(95, 40)).state, .limit)
         let empty = UsageSnapshot(windows: [], balance: Balance(total: "0", currency: "USD", isAvailable: false))
         XCTAssertEqual(UsageAnalysis.of(empty).state, .depleted)
@@ -142,5 +143,15 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(Format.ago(now.addingTimeInterval(-(2 * 3600 + 300)), now: now), "2h 5m ago")
         XCTAssertEqual(Format.percent(0.4), "<1%")
         XCTAssertEqual(Format.planLabel("claude_max"), "Max")
+        XCTAssertEqual(Format.planLabel("max_5x"), "Max 5x")
+        XCTAssertEqual(Format.planLabel("plus"), "Plus")
+    }
+
+    func testClaudePlanName() {
+        XCTAssertEqual(Claude.planName(subscription: "max", tier: "default_claude_max_5x"), "max_5x")
+        XCTAssertEqual(Claude.planName(subscription: "max", tier: "default_claude_max_20x"), "max_20x")
+        XCTAssertEqual(Claude.planName(subscription: "Pro", tier: "default_claude_ai"), "pro")
+        XCTAssertEqual(Claude.planName(subscription: "claude_team", tier: nil), "claude_team")
+        XCTAssertNil(Claude.planName(subscription: nil, tier: nil))
     }
 }

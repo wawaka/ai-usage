@@ -139,13 +139,16 @@ public struct OAuthToken: Codable, Equatable, Sendable {
     /// ChatGPT account id (Codex) — sent as `ChatGPT-Account-Id`.
     public var accountId: String?
     public var idToken: String?
+    /// Subscription plan when the credential itself says (Claude Code's `subscriptionType` / `rateLimitTier`).
+    public var plan: String?
 
-    public init(accessToken: String, refreshToken: String? = nil, expiresAt: Date? = nil, accountId: String? = nil, idToken: String? = nil) {
+    public init(accessToken: String, refreshToken: String? = nil, expiresAt: Date? = nil, accountId: String? = nil, idToken: String? = nil, plan: String? = nil) {
         self.accessToken = accessToken
         self.refreshToken = refreshToken
         self.expiresAt = expiresAt
         self.accountId = accountId
         self.idToken = idToken
+        self.plan = plan
     }
 
     public func isExpired(now: Date = Date(), leeway: TimeInterval = 60) -> Bool {
