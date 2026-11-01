@@ -33,12 +33,11 @@ starts the fresh build.
 
 ## Signing for development
 
-By default, builds are signed ad hoc. macOS then treats every rebuild as a new app and asks for
-Keychain access again. To avoid that, create a stable self-signed identity once:
-
-1. In **Keychain Access**, choose **Certificate Assistant → Create a Certificate…**.
-2. Name it `AI Usage Dev`, with Identity Type *Self-Signed Root* and Certificate Type *Code Signing*.
-3. Build with `SIGN_IDENTITY="AI Usage Dev" Scripts/dev.sh`.
+An ad-hoc signature changes with every build, so macOS treats each rebuild as a new app and asks for
+Keychain access again. `Scripts/dev.sh` therefore signs with a self-signed certificate that it
+generates on first run into `.dev-signing/` (git-ignored, with its own keychain, so your login keychain
+is untouched). Run `Scripts/dev_cert.sh` to regenerate it; the next launch then asks for Keychain
+access once more. `SIGN_IDENTITY="…" Scripts/dev.sh` overrides it. Releases never use this certificate.
 
 The first time, answer *Always Allow* for AI Usage's own `dev.ai-usage.*` items.
 

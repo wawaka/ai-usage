@@ -4,7 +4,10 @@
 #
 #   Scripts/dev.sh                     # debug build (fastest incremental)
 #   CONFIG=release Scripts/dev.sh      # optimized
-#   SIGN_IDENTITY="AI Usage Dev" Scripts/dev.sh   # stable signature → fewer Keychain prompts
+#   SIGN_IDENTITY="…" Scripts/dev.sh   # sign with another identity instead
+#
+# Signed with the self-signed certificate in .dev-signing/ (git-ignored; created on first run, recreate it
+# with Scripts/dev_cert.sh), so the signature stays the same across rebuilds → fewer Keychain prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -28,6 +31,25 @@ if pgrep -x AIUsage >/dev/null; then
 fi
 
 cp "$BIN" "$APP/Contents/MacOS/AIUsage"
-codesign --force --sign "${SIGN_IDENTITY:--}" "$APP" 2>/dev/null
+if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" "$APP"
+else
+  KEYCHAIN="$PWD/.dev-signing/dev.keychain-db"
+  # Create the certificate on first run, and again if the existing one is missing or no longer valid.
+  if [[ ! -f .dev-signing/identity ]] || ! security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$(cat .dev-signing/identity)"; then
+    Scripts/dev_cert.sh
+  fi
+  security unlock-keychain -p "$(cat .dev-signing/keychain-password)" "$KEYCHAIN"
+  # codesign looks for identities in the user's keychain search list: add the dev keychain while signing.
+  SEARCH_LIST=()
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"; line="${line#\"}"; line="${line%\"}"
+    [[ -n "$line" ]] && SEARCH_LIST+=("$line")
+  done < <(security list-keychains -d user)
+  restore_keychains() { security list-keychains -d user -s ${SEARCH_LIST[@]+"${SEARCH_LIST[@]}"}; }
+  trap restore_keychains EXIT
+  security list-keychains -d user -s "$KEYCHAIN" ${SEARCH_LIST[@]+"${SEARCH_LIST[@]}"}
+  codesign --force --keychain "$KEYCHAIN" --sign "$(cat .dev-signing/identity)" "$APP"
+fi
 open "$APP"
 echo "✓ relaunched $APP ($CONFIG)"

@@ -3,4 +3,5 @@
 .swiftpm/
 build/
 dist/
+.dev-signing/
 *.xcodeproj/xcuserdata/
