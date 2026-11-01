@@ -18,26 +18,29 @@ Packaging/            Info.plist
 ## Build and test
 
 ```sh
-swift test                           # core tests (also run on Linux)
-swift test --filter PollingTests     # one test class
-Scripts/dev.sh                       # debug build → replaces and relaunches build/AI Usage.app
-CONFIG=release Scripts/dev.sh        # same, optimised
-Scripts/package_app.sh               # Apple Silicon release build → dist/AIUsage-<version>.zip
+swift test                                           # core tests (also run on Linux)
+swift test --filter PollingTests                     # one test class
+Scripts/dev_rebuild_and_relaunch.sh                  # debug build → replaces and relaunches build/AI Usage.app
+CONFIG=release Scripts/dev_rebuild_and_relaunch.sh   # same, optimised
+Scripts/package_app.sh                               # Apple Silicon release build → dist/AIUsage-<version>.zip
 ```
 
 Release builds are Apple Silicon only. The code still builds for Intel: `ARCHS="arm64 x86_64" Scripts/package_app.sh`
 produces a universal app, but it's untested on Intel Macs.
 
-`Scripts/dev.sh` quits whichever copy of AI Usage is running, wherever it was launched from, then
-starts the fresh build.
+`Scripts/dev_rebuild_and_relaunch.sh` quits whichever copy of AI Usage is running, wherever it was
+launched from, then starts the fresh build. It builds with Xcode's toolchain (/Applications/Xcode.app),
+because the Command Line Tools lack prebuilt SDK modules and make each rebuild take about 18 s instead of
+about 1.3 s; it fails if Xcode is missing. The script's header lists the measured alternatives.
 
 ## Signing for development
 
 An ad-hoc signature changes with every build, so macOS treats each rebuild as a new app and asks for
-Keychain access again. `Scripts/dev.sh` therefore signs with a self-signed certificate that it
-generates on first run into `.dev-signing/` (git-ignored, with its own keychain, so your login keychain
-is untouched). Run `Scripts/dev_cert.sh` to regenerate it; the next launch then asks for Keychain
-access once more. `SIGN_IDENTITY="…" Scripts/dev.sh` overrides it. Releases never use this certificate.
+Keychain access again. `Scripts/dev_rebuild_and_relaunch.sh` therefore signs with a self-signed
+certificate that it generates on first run into `.dev-signing/` (git-ignored, with its own keychain,
+so your login keychain is untouched). Run `Scripts/dev_cert.sh` to regenerate it; the next launch
+then asks for Keychain access once more. `SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh`
+overrides it. Releases never use this certificate.
 
 The first time, answer *Always Allow* for AI Usage's own `dev.ai-usage.*` items.
 

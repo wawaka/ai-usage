@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# (Re)generates the self-signed code-signing certificate used by Scripts/dev.sh, so dev builds keep one
-# stable signature across rebuilds (macOS then stops re-asking for Keychain access after every build).
+# (Re)generates the self-signed code-signing certificate used by Scripts/dev_rebuild_and_relaunch.sh,
+# so dev builds keep one stable signature across rebuilds (macOS then stops re-asking for Keychain
+# access after every build).
 #
 #   Scripts/dev_cert.sh      # wipe .dev-signing/ and create a fresh certificate + keychain
 #
@@ -57,7 +58,8 @@ security set-key-partition-list -S apple-tool:,apple: -s -k "$PASSWORD" "$KEYCHA
 # to authorise it once with your password or Touch ID.
 security add-trusted-cert -r trustRoot -p codeSign -k "$KEYCHAIN" "$DIR/cert.pem"
 
-# dev.sh signs by this SHA-1 (the certificate is self-signed, so it isn't listed as a "valid" identity).
+# dev_rebuild_and_relaunch.sh signs by this SHA-1 (the certificate is self-signed, so it isn't listed
+# as a "valid" identity).
 $OPENSSL x509 -in "$DIR/cert.pem" -noout -fingerprint -sha1 | sed -e 's/.*=//' -e 's/://g' > "$DIR/identity"
 if ! security find-identity -v -p codesigning "$KEYCHAIN" | grep -q "$(cat "$DIR/identity")"; then
   echo "error: the certificate was created but macOS doesn't accept it as a valid code-signing identity" >&2

@@ -2,20 +2,37 @@
 # Fast edit → run loop: builds for this Mac only (no universal binary, no zip), updates
 # build/AI Usage.app in place, quits any running AI Usage (wherever it was launched from) and relaunches.
 #
-#   Scripts/dev.sh                     # debug build (fastest incremental)
-#   CONFIG=release Scripts/dev.sh      # optimized
-#   SIGN_IDENTITY="…" Scripts/dev.sh   # sign with another identity instead
+#   Scripts/dev_rebuild_and_relaunch.sh                    # debug build (fastest incremental)
+#   CONFIG=release Scripts/dev_rebuild_and_relaunch.sh     # optimized
+#   SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh  # sign with another identity instead
 #
 # Signed with the self-signed certificate in .dev-signing/ (git-ignored; created on first run, recreate it
 # with Scripts/dev_cert.sh), so the signature stays the same across rebuilds → fewer Keychain prompts.
+#
+# Toolchain: Xcode's, with the swiftbuild engine (requires /Applications/Xcode.app). Measured on an arm64 Mac
+# (Nov 2026), app rebuild after a code change in one app file:
+#   Xcode toolchain,     --build-system swiftbuild                    ~1.3 s   ← used here
+#   Xcode toolchain,     --build-system native (deprecated)           ~0.9 s
+#   Command Line Tools,  --build-system native (deprecated)           ~0.9 s
+#   Command Line Tools,  --build-system swiftbuild (Swift 6.4 default) ~18 s, sometimes a full ~32 s
+# The Command Line Tools ship no prebuilt SDK modules, so swiftbuild's explicit-module build re-scans and
+# re-validates ~45 SDK modules (Swift, Foundation, AppKit, SwiftUI…) on every build. Xcode ships them.
+# Switching toolchains invalidates the build cache, so the first build after a switch is a full one.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CONFIG="${CONFIG:-debug}"
 APP="build/AI Usage.app"
+XCODE_DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+if [[ ! -d "$XCODE_DEVELOPER_DIR" ]]; then
+  echo "error: Xcode not found at $XCODE_DEVELOPER_DIR (needed for fast rebuilds; see the header of $0)" >&2
+  exit 1
+fi
+export DEVELOPER_DIR="$XCODE_DEVELOPER_DIR"
+BUILD=(swift build --build-system swiftbuild -c "$CONFIG")
 
-swift build -c "$CONFIG" --product AIUsage
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/AIUsage"
+"${BUILD[@]}" --product AIUsage
+BIN="$("${BUILD[@]}" --show-bin-path)/AIUsage"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 sed -e "s/__VERSION__/$(cat VERSION)-dev/" -e "s/__BUILD__/1/" Packaging/Info.plist > "$APP/Contents/Info.plist"

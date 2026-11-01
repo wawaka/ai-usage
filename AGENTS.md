@@ -10,11 +10,13 @@ AI Usage is a native macOS menu bar app (Swift 6.2+ package; AppKit + SwiftUI; r
 swift test                                   # core tests (macOS or Linux)
 swift test --filter PollingTests             # one test class
 swift test --filter PollingTests/testRateLimitHonoursRetryAfterAndBlocksRequests   # one test
-Scripts/dev.sh                               # macOS: debug build, quit running app, replace build/AI Usage.app, relaunch
-SIGN_IDENTITY="AI Usage Dev" Scripts/dev.sh  # same, with a stable signature (avoids repeated Keychain prompts)
+Scripts/dev_rebuild_and_relaunch.sh          # macOS: debug build, quit running app, replace build/AI Usage.app, sign, relaunch
+SIGN_IDENTITY="AI Usage Dev" Scripts/dev_rebuild_and_relaunch.sh  # same, signed with another identity
 Scripts/package_app.sh                       # Apple Silicon release build → dist/AIUsage-<version>.zip (ARCHS="arm64 x86_64" for universal)
 python3 Scripts/embed_marks.py               # regenerate Sources/AIUsage/ProviderIcons.swift from Assets/ProviderMarks/*.svg (needs rsvg-convert)
 ```
+
+`dev_rebuild_and_relaunch.sh` builds with Xcode's toolchain (`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`, `--build-system swiftbuild`) and fails if Xcode is missing. With the Command Line Tools alone, `swiftbuild` takes about 18 s per incremental app rebuild, because they lack prebuilt SDK modules; with Xcode it takes about 1.3 s. The script's header lists the measured alternatives. Keep sources buildable with the Command Line Tools anyway (hence no `@State`).
 
 Off a Mac (e.g. a Linux sandbox), only `AIUsageCore` and its tests build. Run them in Docker, and syntax-check the app sources:
 
@@ -74,7 +76,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
 
 ## Conventions and gotchas
 
-- **No `@State`:** the user builds with only the Command Line Tools, which lack the SwiftUI macro plugin. Hold view state in small `ObservableObject` classes (`Flag`, `AccountsUIState`, …) with `@StateObject`/`@ObservedObject`.
+- **No `@State`:** the sources must still build with only the Command Line Tools, which lack the SwiftUI macro plugin (dev builds use Xcode, see Commands). Hold view state in small `ObservableObject` classes (`Flag`, `AccountsUIState`, …) with `@StateObject`/`@ObservedObject`.
 - **Entry point:** `main.swift` starts the app inside `MainActor.assumeIsolated`.
 - **Persisted state:** `AccountsState` uses a custom `init(from:)` with `decodeIfPresent`. Add new fields the same way so older `accounts.json` files still load.
 - **Provider marks** are vector PDFs embedded as base64 in the generated `ProviderIcons.swift`. Don't edit that file by hand. The SVG sources and trademark notice are in `Assets/ProviderMarks/`.
