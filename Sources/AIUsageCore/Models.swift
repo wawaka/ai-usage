@@ -80,6 +80,18 @@ public struct UsageWindow: Codable, Equatable, Sendable {
     /// reporting a reset a full window from now, Claude none), so there's no countdown or pace to show.
     public var isUntouched: Bool { usedPercent <= 0 }
 
+    /// How much of a meter's fill is on pace (drawn green) and how much is ahead of it (amber), in display %.
+    /// Used: the fill up to the time cursor is on pace, the part past it is ahead. Remaining: the whole fill is
+    /// on pace while it reaches the cursor (more quota left than time), otherwise all of it is ahead.
+    /// Without a time position (unknown or untouched window) everything is on pace.
+    public func paceSplit(remaining: Bool, now: Date = Date()) -> (onPace: Double, fill: Double) {
+        let d = display(remaining: remaining, now: now)
+        guard let time = d.time else { return (d.percent, d.percent) }
+        let cursor = time * 100
+        if remaining { return (d.percent >= cursor ? d.percent : 0, d.percent) }
+        return (min(d.percent, cursor), d.percent)
+    }
+
     /// What a meter shows: used% and elapsed time, or (inverted) remaining% and time left.
     /// Either way, a usage fill past the time fill means quota runs out before the window resets.
     /// An untouched window has no time position.

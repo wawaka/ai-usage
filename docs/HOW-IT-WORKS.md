@@ -67,7 +67,7 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
 
 ## Display
 
-- **States:** *High* from 70% and *Limit* at 90%+ of the most-used window. DeepSeek shows its balance instead.
+- **States:** *Limit* at 90%+ of the most-used window (no badge; it tints the collapsed icon and ranks the account as most urgent). DeepSeek shows its balance instead.
 - **Title width:** *Auto* measures the space to the right of the notch, or half the menu bar on
   displays without one. It shows all accounts if they fit, then only the most urgent account, then
   a single gauge icon.

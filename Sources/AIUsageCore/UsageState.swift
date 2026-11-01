@@ -2,17 +2,14 @@ import Foundation
 
 /// How close an account is to its limits, based purely on current usage.
 public enum UsageState: String, Codable, Sendable {
-    case normal, high, limit, balance, depleted, unavailable
+    case normal, limit, balance, depleted, unavailable
 
-    public static let highThreshold = 70.0
     public static let limitThreshold = 90.0
 
     /// Badge text in the panel; nil when there is nothing to call out.
     public var badge: String? {
         switch self {
-        case .normal: return nil
-        case .high: return nil
-        case .limit: return "Limit"
+        case .normal, .limit: return nil
         case .balance: return "Balance"
         case .depleted: return "Depleted"
         case .unavailable: return "Error"
@@ -24,7 +21,6 @@ public enum UsageState: String, Codable, Sendable {
         switch self {
         case .unavailable: return 0
         case .depleted, .limit: return 1
-        case .high: return 2
         case .normal, .balance: return 3
         }
     }
@@ -47,7 +43,6 @@ public struct UsageAnalysis: Codable, Equatable, Sendable {
         }
         let peak = snapshot.windows.map(\.usedPercent).max() ?? 0
         if peak >= UsageState.limitThreshold { return UsageAnalysis(state: .limit) }
-        if peak >= UsageState.highThreshold { return UsageAnalysis(state: .high) }
         return UsageAnalysis(state: .normal)
     }
 }

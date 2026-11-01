@@ -105,8 +105,7 @@ final class ProviderTests: XCTestCase {
         }
         XCTAssertEqual(UsageAnalysis.of(snap(10, 40)).state, .normal)
         XCTAssertNil(UsageState.normal.badge)
-        XCTAssertEqual(UsageAnalysis.of(snap(10, 70)).state, .high)
-        XCTAssertNil(UsageState.high.badge)
+        XCTAssertEqual(UsageAnalysis.of(snap(10, 70)).state, .normal)
         XCTAssertEqual(UsageAnalysis.of(snap(95, 40)).state, .limit)
         let empty = UsageSnapshot(windows: [], balance: Balance(total: "0", currency: "USD", isAvailable: false))
         XCTAssertEqual(UsageAnalysis.of(empty).state, .depleted)
@@ -124,6 +123,24 @@ final class ProviderTests: XCTestCase {
         XCTAssertTrue(untouched.isUntouched)
         XCTAssertNil(untouched.display(remaining: false, now: now).time, "no time position before the window starts")
         XCTAssertEqual(untouched.display(remaining: true, now: now).percent, 100)
+    }
+
+    func testPaceSplit() {
+        let now = Date()
+        func window(_ used: Double) -> UsageWindow {
+            UsageWindow(kind: .fiveHour, usedPercent: used, resetsAt: now.addingTimeInterval(3600 * 4), windowMinutes: 300)  // 20% elapsed
+        }
+        // Behind the cursor: all on pace. Past it: green up to the cursor, amber after.
+        XCTAssertEqual(window(15).paceSplit(remaining: false, now: now).onPace, 15, accuracy: 1e-9)
+        let ahead = window(30).paceSplit(remaining: false, now: now)
+        XCTAssertEqual(ahead.onPace, 20, accuracy: 1e-9)
+        XCTAssertEqual(ahead.fill, 30, accuracy: 1e-9)
+        // Remaining view: the fill (70) reaches the cursor (80)? No → ahead; 90 left does → on pace.
+        XCTAssertEqual(window(30).paceSplit(remaining: true, now: now).onPace, 0)
+        XCTAssertEqual(window(10).paceSplit(remaining: true, now: now).onPace, 90, accuracy: 1e-9)
+        // No time position (unknown window length): everything is on pace.
+        let unknown = UsageWindow(kind: .sevenDay, usedPercent: 50, resetsAt: nil).paceSplit(remaining: false, now: now)
+        XCTAssertEqual(unknown.onPace, 50)
     }
 
     func testFormat() {

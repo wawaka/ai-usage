@@ -17,6 +17,8 @@ enum TitleRenderer {
 
     struct Bar {
         var percent: Double
+        /// Part of `percent` that is on pace (green); the rest is ahead of the window's pace (amber).
+        var onPace: Double
         /// Fraction of the window's time elapsed (or left, when showing remaining); drawn as an I-beam cursor.
         var time: Double?
         /// Window not started yet: drawn grey, without a cursor.
@@ -30,6 +32,17 @@ enum TitleRenderer {
         var percents: [Double]
         var state: UsageState?
         var balanceText: String?
+
+        /// Usage ahead of the window's pace on any bar.
+        var ahead: Bool { bars.contains { $0.percent > $0.onPace } }
+
+        /// Percent text colour: green on pace, amber when ahead; balance and error states keep their own.
+        var textColor: NSColor {
+            switch state {
+            case .unavailable, .balance, .depleted, .none: return Theme.color(for: state)
+            default: return ahead ? Theme.warning : Theme.ok
+            }
+        }
     }
 
     static func segments(for statuses: [AccountStatus], remaining: Bool) -> [Segment] {
@@ -44,12 +57,12 @@ enum TitleRenderer {
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
                 let d = w.display(remaining: remaining)
-                return Bar(percent: d.percent, time: d.time, untouched: w.isUntouched)
+                return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining).onPace, time: d.time, untouched: w.isUntouched)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
-            if bars.isEmpty, let balance { bars = [Bar(percent: balance.isAvailable ? 100 : 0)] }
-            if bars.isEmpty { bars = [Bar(percent: 0)] }
+            if bars.isEmpty, let balance { bars = [Bar(percent: balance.isAvailable ? 100 : 0, onPace: balance.isAvailable ? 100 : 0)] }
+            if bars.isEmpty { bars = [Bar(percent: 0, onPace: 0)] }
             return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
                            percents: [five, seven].compactMap { $0?.display(remaining: remaining).percent },
                            state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
@@ -88,7 +101,7 @@ enum TitleRenderer {
                 }
                 Theme.drawMark(seg.provider, in: NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize), badge: seg.badge)
                 x += iconSize
-                let fill = Theme.color(for: seg.state)
+                let fill = seg.textColor
                 if style != .percent {
                     x += iconBarGap
                     let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
@@ -100,7 +113,7 @@ enum TitleRenderer {
                                          xRadius: barRadius, yRadius: barRadius).fill()
                         }
                         capsule(barWidth, barBg)
-                        if bar.percent > 0 { capsule(barWidth * min(bar.percent, 100) / 100, bar.untouched ? Theme.muted : fill) }
+                        if bar.percent > 0 { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y)) }
                         // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
                         if let time = bar.time {
                             drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)
@@ -121,6 +134,28 @@ enum TitleRenderer {
         }
         image.isTemplate = false
         return image
+    }
+
+    /// A bar's fill: green up to the point the window's time has reached, amber for what lies past it.
+    /// `flat` draws it grey instead (untouched window, or stale data).
+    static func fillBar(_ bar: Bar, flat: Bool, at origin: NSPoint) {
+        let width = max(barRadius * 2, (barWidth * min(bar.percent, 100) / 100).rounded())
+        let rect = NSRect(x: origin.x, y: origin.y, width: width, height: barHeight)
+        let path = NSBezierPath(roundedRect: rect, xRadius: barRadius, yRadius: barRadius)
+        if flat {
+            Theme.muted.setFill()
+            path.fill()
+            return
+        }
+        Theme.warning.setFill()
+        path.fill()
+        guard bar.onPace > 0 else { return }
+        NSGraphicsContext.saveGraphicsState()
+        path.addClip()
+        Theme.ok.setFill()
+        let goodWidth = bar.onPace >= bar.percent ? width : (barWidth * min(bar.onPace, 100) / 100).rounded()
+        NSRect(x: origin.x, y: origin.y, width: goodWidth, height: barHeight).fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     /// I-beam cursor: a hairline stem just taller than the bar with tiny serifs top and bottom,

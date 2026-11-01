@@ -25,7 +25,6 @@ enum Theme {
 
     static func color(for state: UsageState?) -> NSColor {
         switch state {
-        case .high: return warning
         case .limit, .depleted: return alert
         case .unavailable, .none: return muted
         case .normal, .balance: return ok

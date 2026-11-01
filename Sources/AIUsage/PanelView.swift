@@ -170,7 +170,7 @@ struct AccountSection: View {
             }
             let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
-                WindowRow(window: w, tint: tint, remaining: remaining, labelWidth: labelWidth)
+                WindowRow(window: w, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
             }
             if let balance = status.snapshot?.balance {
                 HStack(spacing: 6) {
@@ -255,7 +255,8 @@ struct StateBadge: View {
 
 struct WindowRow: View {
     let window: UsageWindow
-    let tint: Color
+    /// Stale data (the last fetch failed): drawn grey instead of green/amber.
+    let muted: Bool
     let remaining: Bool
     /// Same for every row of an account, so their bars line up.
     var labelWidth: CGFloat = 20
@@ -263,13 +264,17 @@ struct WindowRow: View {
     var body: some View {
         let shown = window.display(remaining: remaining)
         let idle = window.isUntouched
-        let color = idle ? Color.secondary : tint
+        let split = window.paceSplit(remaining: remaining)
+        let flat = idle || muted
+        let good = flat ? Color.secondary.opacity(idle ? 0.5 : 1) : Color(nsColor: Theme.ok)
+        let ahead = flat ? good : Color(nsColor: Theme.warning)
+        let color = flat ? Color.secondary : split.fill > split.onPace ? ahead : good
         // The bar takes all the width between the label and the percent + time-left columns.
         // An untouched window is a plain grey bar: no cursor, no countdown (its clock hasn't started).
         HStack(spacing: 6) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: labelWidth, alignment: .leading)
-            Meter(value: shown.percent, time: shown.time, tint: idle ? Color.secondary.opacity(0.5) : tint)
+            Meter(value: shown.percent, onPace: split.onPace, time: shown.time, good: good, ahead: ahead)
                 .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(color).frame(width: 34, alignment: .trailing)
@@ -289,8 +294,11 @@ struct WindowRow: View {
 /// Usage reaching past the cursor means quota is being used faster than the window elapses.
 struct Meter: View {
     let value: Double
+    /// Part of `value` that is on pace (`good`); the rest is ahead of it (`ahead`).
+    let onPace: Double
     var time: Double?
-    let tint: Color
+    let good: Color
+    let ahead: Color
 
     var body: some View {
         GeometryReader { geo in
@@ -298,7 +306,13 @@ struct Meter: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Color.secondary.opacity(0.22)).frame(height: 6)
                 if value > 0 {
-                    Capsule().fill(tint).frame(width: max(6, w * min(value, 100) / 100), height: 6)
+                    let fill = max(6, w * min(value, 100) / 100)
+                    let goodWidth = onPace >= value ? fill : w * min(onPace, 100) / 100
+                    ZStack(alignment: .leading) {
+                        Rectangle().fill(ahead)
+                        Rectangle().fill(good).frame(width: goodWidth)
+                    }
+                    .frame(width: fill, height: 6).clipShape(Capsule())
                 }
                 if let time {
                     IBeam().stroke(Color.primary.opacity(0.45), lineWidth: 1)
