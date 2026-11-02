@@ -41,7 +41,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
 2. `UsageService` (an actor) merges them with accounts added in the app. It owns account state and polling.
 3. `UsageFetcher` (`Providers.swift`) dispatches to a parser/fetcher for each provider. It turns HTTP JSON into a `UsageSnapshot` (5h/7d `UsageWindow`s, extra windows, or a `Balance`).
 4. `AppModel` (`@MainActor`) publishes `[AccountStatus]` to the views.
-5. `StatusItemController` + `TitleRenderer` draw the menu bar image natively. `PanelView` is the popover. `AccountsView.swift` also contains the Accounts and Settings windows and the login sheets.
+5. `StatusItemController` + `TitleRenderer` draw the menu bar image natively. `PanelView` is the popover. Both draw time-dependent values (time left, pace cursor, data age) against one `Clock`, which ticks each whole minute, on wake/clock changes and when the popover opens; pass its `now` down rather than calling `Date()` in views. `AccountsView.swift` also contains the Accounts and Settings windows and the login sheets.
 
 **Account sources.**
 - **Local accounts** (`AccountOrigin.local`) are discovered read-only from these sources:

@@ -12,6 +12,8 @@ struct PanelActions {
 struct PanelView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var settings: AppSettings
+    /// Every tick (each minute, on wake, when the dropdown opens) redraws the time-dependent values.
+    @ObservedObject var clock: Clock
     let actions: PanelActions
 
     var body: some View {
@@ -35,7 +37,7 @@ struct PanelView: View {
         VStack(spacing: 0) {
             ForEach(Array(model.statuses.enumerated()), id: \.element.id) { index, status in
                 if index > 0 { Divider().padding(.horizontal, 16) }
-                AccountSection(status: status, remaining: settings.showRemaining,
+                AccountSection(status: status, now: clock.now, remaining: settings.showRemaining,
                                showName: settings.showAccountNames,
                                refreshing: model.refreshingIDs.contains(status.id),
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
@@ -128,6 +130,7 @@ struct ToggleRow: View {
 
 struct AccountSection: View {
     let status: AccountStatus
+    let now: Date
     let remaining: Bool
     let showName: Bool
     let refreshing: Bool
@@ -170,7 +173,7 @@ struct AccountSection: View {
             }
             let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
-                WindowRow(window: w, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
+                WindowRow(window: w, now: now, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
             }
             if let balance = status.snapshot?.balance {
                 HStack(spacing: 6) {
@@ -200,7 +203,7 @@ struct AccountSection: View {
                 if refreshing {
                     ProgressView().controlSize(.small)
                 } else {
-                    RefreshButton(updated: status.snapshot?.observedAt, next: status.nextRefresh, action: reload)
+                    RefreshButton(updated: status.snapshot?.observedAt, next: status.nextRefresh, now: now, action: reload)
                 }
             }
             .frame(minWidth: 20, alignment: .trailing)
@@ -213,6 +216,7 @@ struct AccountSection: View {
 struct RefreshButton: View {
     let updated: Date?
     let next: Date?
+    let now: Date
     let action: () -> Void
     @StateObject private var hover = Flag()
 
@@ -220,10 +224,7 @@ struct RefreshButton: View {
         Button(action: action) {
             HStack(spacing: 4) {
                 if let updated {
-                    // Re-rendered every 30 s so the age stays current while the dropdown is open.
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Text(Format.ago(updated, now: context.date)).monospacedDigit()
-                    }
+                    Text(Format.ago(updated, now: now)).monospacedDigit()
                 }
                 Image(systemName: "arrow.clockwise")
             }
@@ -255,6 +256,7 @@ struct StateBadge: View {
 
 struct WindowRow: View {
     let window: UsageWindow
+    let now: Date
     /// Stale data (the last fetch failed): drawn grey instead of green/amber.
     let muted: Bool
     let remaining: Bool
@@ -262,9 +264,9 @@ struct WindowRow: View {
     var labelWidth: CGFloat = 20
 
     var body: some View {
-        let shown = window.display(remaining: remaining)
+        let shown = window.display(remaining: remaining, now: now)
         let idle = window.isUntouched
-        let split = window.paceSplit(remaining: remaining)
+        let split = window.paceSplit(remaining: remaining, now: now)
         let flat = idle || muted
         let good = flat ? Color.secondary.opacity(idle ? 0.5 : 1) : Color(nsColor: Theme.ok)
         let ahead = flat ? good : Color(nsColor: Theme.warning)
@@ -278,9 +280,9 @@ struct WindowRow: View {
                 .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(color).frame(width: 34, alignment: .trailing)
-            Text(idle ? "" : Format.countdown(window.resetsAt)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            Text(idle ? "" : Format.countdown(window.resetsAt, now: now)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: 48, alignment: .trailing)
-                .help(Format.reset(window.resetsAt))
+                .help(Format.reset(window.resetsAt, now: now))
         }
     }
 

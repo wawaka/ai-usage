@@ -45,7 +45,7 @@ enum TitleRenderer {
         }
     }
 
-    static func segments(for statuses: [AccountStatus], remaining: Bool) -> [Segment] {
+    static func segments(for statuses: [AccountStatus], remaining: Bool, now: Date = Date()) -> [Segment] {
         let counts = Dictionary(grouping: statuses, by: \.account.provider).mapValues(\.count)
         var seen: [ProviderKind: Int] = [:]
         return statuses.map { s in
@@ -56,15 +56,15 @@ enum TitleRenderer {
             var shown = [five, seven].compactMap { $0 }
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
-                let d = w.display(remaining: remaining)
-                return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining).onPace, time: d.time, untouched: w.isUntouched)
+                let d = w.display(remaining: remaining, now: now)
+                return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining, now: now).onPace, time: d.time, untouched: w.isUntouched)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
             if bars.isEmpty, let balance { bars = [Bar(percent: balance.isAvailable ? 100 : 0, onPace: balance.isAvailable ? 100 : 0)] }
             if bars.isEmpty { bars = [Bar(percent: 0, onPace: 0)] }
             return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
-                           percents: [five, seven].compactMap { $0?.display(remaining: remaining).percent },
+                           percents: [five, seven].compactMap { $0?.display(remaining: remaining, now: now).percent },
                            state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
                            balanceText: balance?.formatted)
         }

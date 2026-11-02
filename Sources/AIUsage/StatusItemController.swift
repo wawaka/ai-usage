@@ -9,22 +9,23 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let model: AppModel
     private let settings: AppSettings
+    private let clock: Clock
     private var cancellables: Set<AnyCancellable> = []
     private var appearanceObservation: NSKeyValueObservation?
     private var eventMonitor: Any?
-    private var clockTimer: Timer?
     /// Invisible window the popover is anchored to, so it stays put when the menu bar item resizes.
     private var anchorWindow: NSWindow?
 
-    init(model: AppModel, settings: AppSettings, actions: PanelActions) {
+    init(model: AppModel, settings: AppSettings, clock: Clock, actions: PanelActions) {
         self.model = model
         self.settings = settings
+        self.clock = clock
         super.init()
 
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: PanelView(model: model, settings: settings, actions: actions))
+        popover.contentViewController = NSHostingController(rootView: PanelView(model: model, settings: settings, clock: clock, actions: actions))
 
         if let button = item.button {
             button.target = self
@@ -41,13 +42,12 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
             .store(in: &cancellables)
+        // Bars, percent left and the refresh guide depend on the time, so redraw on every clock tick
+        // (each minute, after wake, on clock changes) even when no data changed.
+        clock.$now.dropFirst()
+            .sink { [weak self] _ in Task { @MainActor in self?.render() } }
+            .store(in: &cancellables)
         NotificationCenter.default.addObserver(self, selector: #selector(screensChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
-        // The refresh-guide cursors depend on the current time, so redraw even when no data changed
-        // (as the panel does), and after sleep, when timers may have been suspended for hours.
-        clockTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.render() }
-        }
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(screensChanged), name: NSWorkspace.didWakeNotification, object: nil)
         render()
     }
 
@@ -59,7 +59,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let style = settings.titleStyle
         var mode = settings.titleMode
         let remaining = settings.showRemaining
-        let all = TitleRenderer.segments(for: statuses, remaining: remaining)
+        let now = Date()
+        let all = TitleRenderer.segments(for: statuses, remaining: remaining, now: now)
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
@@ -73,7 +74,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             image = TitleRenderer.image(for: all, style: style)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining), style: style)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, now: now), style: style)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }
@@ -81,14 +82,14 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             image = TitleRenderer.iconImage(worst: TitleRenderer.mostUrgent(statuses)?.analysis?.state)
         }
         button.image = image
-        button.toolTip = tooltip(statuses, remaining: remaining)
+        button.toolTip = tooltip(statuses, remaining: remaining, now: now)
     }
 
-    private func tooltip(_ statuses: [AccountStatus], remaining: Bool) -> String {
+    private func tooltip(_ statuses: [AccountStatus], remaining: Bool, now: Date) -> String {
         guard !statuses.isEmpty else { return "AI Usage — no accounts yet" }
         return statuses.map { s in
             let windows = (s.snapshot?.windows ?? []).map {
-                "\($0.label) \(Format.percent($0.display(remaining: remaining).percent))\(remaining ? " left" : "")"
+                "\($0.label) \(Format.percent($0.display(remaining: remaining, now: now).percent))\(remaining ? " left" : "")"
             }.joined(separator: ", ")
             let value = s.snapshot?.balance?.formatted ?? windows
             let name = settings.showAccountNames ? " · \(s.account.label)" : ""
@@ -100,6 +101,8 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         if popover.isShown {
             closePopover()
         } else if let button = item.button, let buttonWindow = button.window {
+            // Redraw the dropdown (and title) against the current time every time it opens.
+            clock.tick()
             NSApp.activate(ignoringOtherApps: true)
             // The popover follows its anchor view, and the status item changes width (e.g. when an
             // account is toggled in the menu bar). Anchor it to a fixed copy of the button's frame.

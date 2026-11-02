@@ -5,6 +5,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
     private var model: AppModel!
+    private let clock = Clock()
     private var statusController: StatusItemController!
     private var windows: [String: NSWindow] = [:]
 
@@ -15,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             openAccounts: { [weak self] in self?.showAccounts() },
             openSettings: { [weak self] in self?.showSettings() },
             quit: { NSApp.terminate(nil) })
-        statusController = StatusItemController(model: model, settings: settings, actions: actions)
+        statusController = StatusItemController(model: model, settings: settings, clock: clock, actions: actions)
     }
 
     private func showAccounts() {
