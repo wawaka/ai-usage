@@ -21,6 +21,14 @@ A native macOS menu bar app that shows how much of your AI coding subscriptions 
 
 Requires an Apple Silicon Mac (M1 or later) with macOS 14 (Sonoma) or later.
 
+With [Homebrew](https://brew.sh):
+
+```sh
+brew install --cask wawaka/tap/ai-usage
+```
+
+Or by hand:
+
 1. Download `AIUsage-<version>.zip` from the
    [latest release](https://github.com/wawaka/ai-usage/releases/latest) and unzip it.
 2. Move **AI Usage.app** to `/Applications`.

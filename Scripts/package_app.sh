@@ -3,6 +3,7 @@
 #
 #   Scripts/package_app.sh                 # ad-hoc signed
 #   ARCHS="arm64 x86_64" Scripts/package_app.sh   # universal build incl. Intel (untested, off by default)
+#   SIGN_IDENTITY="Apple Development: …" Scripts/package_app.sh   # what .github/workflows/release.yml does
 #   SIGN_IDENTITY="Developer ID Application: …" NOTARY_PROFILE=<notarytool keychain profile> Scripts/package_app.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."

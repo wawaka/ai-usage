@@ -48,26 +48,18 @@ rebuilds stop prompting.
 
 Without one, the script falls back to a self-signed certificate it generates into `.dev-signing/`
 (git-ignored, with its own keychain; `Scripts/dev_cert.sh` regenerates it) and warns that Keychain will
-keep asking. `SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh` overrides both. Releases never use
-these certificates.
+keep asking. `SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh` overrides both. Releases are signed
+with the same Apple Development certificate, from a repo secret (see [RELEASE.md](RELEASE.md)), never
+with the self-signed one.
 
 ## Releases
 
-For a release that opens without Gatekeeper warnings, sign it with a Developer ID and notarize it:
+Releases are published by `.github/workflows/release.yml` on a `v*` tag and installed with
+`brew install --cask wawaka/tap/ai-usage`. See [RELEASE.md](RELEASE.md) for the one-time setup
+(certificate, secrets, tap), the per-release steps and yearly certificate renewal.
 
-```sh
-SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=notary Scripts/package_app.sh
-```
-
-Without that, users of a downloaded build need right-click → Open, or
-`xattr -dr com.apple.quarantine "AI Usage.app"`, the first time.
-
-CI (`.github/workflows/build.yml`):
-- Runs the core tests on Linux.
-- Builds and zips the app on macOS and uploads the zip as the `AIUsage-zip` artifact of each run.
-- On a `v*` tag, attaches the zip to that GitHub release.
-
-The version comes from `VERSION`.
+CI (`.github/workflows/build.yml`) runs the core tests on Linux, and on macOS builds an ad-hoc signed
+zip, uploaded as the `AIUsage-zip` artifact of each run.
 
 ## CLI
 

@@ -1,0 +1,120 @@
+name: release
+
+# Push a tag matching VERSION (e.g. `git tag v1.0.1 && git push origin v1.0.1`) to publish a release:
+# tests, a signed build, the GitHub release with the zip, and the updated cask in the Homebrew tap.
+# Secrets and setup: docs/DEVELOPMENT.md → Releases.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write   # create the release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 30
+    env:
+      TAP_REPO: ${{ vars.HOMEBREW_TAP_REPO || format('{0}/homebrew-tap', github.repository_owner) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # build number = commit count
+
+      - name: Check the tag matches VERSION
+        run: |
+          if [[ "$GITHUB_REF_NAME" != "v$(cat VERSION)" ]]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match VERSION ($(cat VERSION))"
+            exit 1
+          fi
+
+      - run: swift test
+
+      # A signature with a Team ID makes users' Keychain "Always Allow" survive updates; an ad-hoc one
+      # doesn't, so a release without the certificate fails instead of silently going out ad-hoc.
+      - name: Import the signing certificate
+        env:
+          CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [[ -z "$CERT_P12" ]]; then
+            echo "::error::the MACOS_CERT_P12 secret is not set (see docs/DEVELOPMENT.md → Releases)"
+            exit 1
+          fi
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "SIGNING_KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          # Apple's intermediate CA, so the certificate validates (the runner may already have it).
+          curl -fsSL -o "$RUNNER_TEMP/wwdr.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+          security import "$RUNNER_TEMP/wwdr.cer" -k "$KEYCHAIN" || true
+          # Let codesign use the key without a prompt, and let it find the keychain.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+
+          IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" \
+            | awk '/"(Apple Development|Developer ID Application): / && !h { h = $2 } END { print h }')"
+          if [[ -z "$IDENTITY" ]]; then
+            echo "::error::MACOS_CERT_P12 holds no valid Apple Development or Developer ID identity"
+            security find-identity -p codesigning "$KEYCHAIN"
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+
+      - name: Build, sign and zip
+        run: Scripts/package_app.sh
+
+      - name: Check the signature carries a Team ID
+        run: |
+          codesign -dv "build/AI Usage.app" 2>&1 | grep -E '^(Authority|TeamIdentifier)='
+          TEAM="$(codesign -dv "build/AI Usage.app" 2>&1 | sed -n 's/^TeamIdentifier=//p')"
+          [[ "$TEAM" =~ ^[A-Z0-9]{10}$ ]] || { echo "::error::no Team ID in the signature"; exit 1; }
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="dist/AIUsage-$(cat VERSION).zip"
+          gh release create "$GITHUB_REF_NAME" "$ZIP" --verify-tag --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber
+
+      - name: Update the Homebrew cask
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          if [[ -z "$TAP_TOKEN" ]]; then
+            echo "::warning::the TAP_TOKEN secret is not set, so $TAP_REPO was not updated"
+            exit 0
+          fi
+          VERSION="$(cat VERSION)"
+          SHA="$(shasum -a 256 "dist/AIUsage-$VERSION.zip" | cut -d' ' -f1)"
+          git clone "https://x-access-token:$TAP_TOKEN@github.com/$TAP_REPO.git" "$RUNNER_TEMP/tap"
+          mkdir -p "$RUNNER_TEMP/tap/Casks"
+          Scripts/write_cask.sh "$VERSION" "$SHA" "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/tap/Casks/ai-usage.rb"
+          cd "$RUNNER_TEMP/tap"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Casks/ai-usage.rb
+          if git diff --cached --quiet; then
+            echo "cask already at $VERSION"
+          else
+            git commit -m "ai-usage $VERSION"
+            git push
+          fi
+
+      - name: Remove the signing keychain
+        if: always()
+        run: |
+          if [[ -n "${SIGNING_KEYCHAIN:-}" ]]; then security delete-keychain "$SIGNING_KEYCHAIN" || true; fi
