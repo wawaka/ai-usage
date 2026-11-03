@@ -10,8 +10,8 @@ AI Usage is a native macOS menu bar app (Swift 6.2+ package; AppKit + SwiftUI; r
 swift test                                   # core tests (macOS or Linux)
 swift test --filter PollingTests             # one test class
 swift test --filter PollingTests/testRateLimitHonoursRetryAfterAndBlocksRequests   # one test
-Scripts/dev_rebuild_and_relaunch.sh          # macOS: debug build, quit running app, replace build/AI Usage.app, sign, relaunch
-SIGN_IDENTITY="AI Usage Dev" Scripts/dev_rebuild_and_relaunch.sh  # same, signed with another identity
+Scripts/dev_rebuild_and_relaunch.sh          # macOS: debug build, quit running app, replace build/AI Usage.app, sign (Apple Development cert if present, else self-signed), relaunch
+SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh  # same, signed with another identity
 Scripts/package_app.sh                       # Apple Silicon release build → dist/AIUsage-<version>.zip (ARCHS="arm64 x86_64" for universal)
 python3 Scripts/embed_marks.py               # regenerate Sources/AIUsage/ProviderIcons.swift from Assets/ProviderMarks/*.svg (needs rsvg-convert)
 ```

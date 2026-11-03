@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# (Re)generates the self-signed code-signing certificate used by Scripts/dev_rebuild_and_relaunch.sh,
-# so dev builds keep one stable signature across rebuilds (macOS then stops re-asking for Keychain
-# access after every build).
+# (Re)generates the self-signed code-signing certificate that Scripts/dev_rebuild_and_relaunch.sh falls
+# back to when you have no Apple Development certificate. It gives dev builds a stable designated
+# requirement, but it does NOT stop Keychain prompts after each rebuild: for code without a Team ID,
+# Keychain remembers the exact build (cdhash). Use an Apple Development certificate for that.
 #
 #   Scripts/dev_cert.sh      # wipe .dev-signing/ and create a fresh certificate + keychain
 #
 # Everything lives in .dev-signing/ (git-ignored) in its own keychain, so your login keychain is not touched.
 # Dev builds only: Scripts/package_app.sh never uses this certificate.
-# A new certificate is a new identity: macOS will ask once more for Keychain access after regenerating.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

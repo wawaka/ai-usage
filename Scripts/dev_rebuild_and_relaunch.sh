@@ -6,8 +6,11 @@
 #   CONFIG=release Scripts/dev_rebuild_and_relaunch.sh     # optimized
 #   SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh  # sign with another identity instead
 #
-# Signed with the self-signed certificate in .dev-signing/ (git-ignored; created on first run, recreate it
-# with Scripts/dev_cert.sh), so the signature stays the same across rebuilds → fewer Keychain prompts.
+# Signing: your Apple Development certificate when there is one (free with any Apple ID; Xcode → Settings →
+# Accounts → Manage Certificates). It carries a Team ID, which is what lets Keychain's "Always Allow" survive
+# rebuilds. Without one, it falls back to the self-signed certificate in .dev-signing/ (git-ignored; created on
+# first run, recreate it with Scripts/dev_cert.sh): the build runs, but Keychain asks again after every rebuild,
+# because for code without a Team ID it remembers each build's hash (cdhash), not the certificate.
 #
 # Toolchain: Xcode's, with the swiftbuild engine (requires /Applications/Xcode.app). Measured on an arm64 Mac
 # (Nov 2026), app rebuild after a code change in one app file:
@@ -48,9 +51,15 @@ if pgrep -x AIUsage >/dev/null; then
 fi
 
 cp "$BIN" "$APP/Contents/MacOS/AIUsage"
-if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+if [[ -z "${SIGN_IDENTITY:-}" ]]; then
+  # SHA-1 of the first valid Apple Development identity (by hash, so several of them aren't ambiguous).
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning | awk '/"Apple Development: / && !h { h = $2 } END { print h }')"
+fi
+if [[ -n "$SIGN_IDENTITY" ]]; then
   codesign --force --sign "$SIGN_IDENTITY" "$APP"
 else
+  echo "note: no Apple Development certificate found; signing with the self-signed one, so Keychain will" >&2
+  echo "      ask for access again after every rebuild (see docs/DEVELOPMENT.md)" >&2
   KEYCHAIN="$PWD/.dev-signing/dev.keychain-db"
   # Create the certificate on first run, and again if the existing one is missing or no longer valid.
   if [[ ! -f .dev-signing/identity ]] || ! security find-identity -v -p codesigning "$KEYCHAIN" 2>/dev/null | grep -q "$(cat .dev-signing/identity)"; then

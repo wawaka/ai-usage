@@ -35,14 +35,21 @@ about 1.3 s; it fails if Xcode is missing. The script's header lists the measure
 
 ## Signing for development
 
-An ad-hoc signature changes with every build, so macOS treats each rebuild as a new app and asks for
-Keychain access again. `Scripts/dev_rebuild_and_relaunch.sh` therefore signs with a self-signed
-certificate that it generates on first run into `.dev-signing/` (git-ignored, with its own keychain,
-so your login keychain is untouched). Run `Scripts/dev_cert.sh` to regenerate it; the next launch
-then asks for Keychain access once more. `SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh`
-overrides it. Releases never use this certificate.
+When you answer *Always Allow*, Keychain remembers the app by its Team ID if it has one, and
+otherwise by the hash of that exact build. Without a Team ID, every rebuild is a new app to Keychain
+and it asks again, even with a stable self-signed certificate.
 
-The first time, answer *Always Allow* for AI Usage's own `dev.ai-usage.*` items.
+`Scripts/dev_rebuild_and_relaunch.sh` therefore signs with your **Apple Development** certificate when
+one is installed. It's free with any Apple ID: in Xcode, Settings → Accounts → add the Apple ID →
+Manage Certificates → + → Apple Development. (If Xcode says "Failed to retrieve development teams",
+sign in once at developer.apple.com and accept the agreement.) Check it with
+`security find-identity -v -p codesigning | grep "Apple Development"`. After the first *Always Allow*,
+rebuilds stop prompting.
+
+Without one, the script falls back to a self-signed certificate it generates into `.dev-signing/`
+(git-ignored, with its own keychain; `Scripts/dev_cert.sh` regenerates it) and warns that Keychain will
+keep asking. `SIGN_IDENTITY="…" Scripts/dev_rebuild_and_relaunch.sh` overrides both. Releases never use
+these certificates.
 
 ## Releases
 
