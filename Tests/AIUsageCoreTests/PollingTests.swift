@@ -55,6 +55,30 @@ final class PollingTests: XCTestCase {
         XCTAssertEqual(onTime, 1)
     }
 
+    func testEachWindowResetRestartsBackoffEvenWhenUsageIsUnchanged() async throws {
+        for kind in ["five_hour", "seven_day"] {
+            let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+            let reset = t0.addingTimeInterval(300)
+            let resetString = ISO8601DateFormatter().string(from: reset)
+            let body: [String: Any] = [
+                "five_hour": ["utilization": 100, "resets_at": kind == "five_hour" ? resetString as Any : NSNull()],
+                "seven_day": ["utilization": 100, "resets_at": kind == "seven_day" ? resetString as Any : NSNull()]
+            ]
+            let http = ScriptedHTTP(HTTPResponse(status: 200, body: try JSONSerialization.data(withJSONObject: body)))
+            let (service, account) = try await makeService(http)
+            for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
+            let due = await service.nextRefresh(account.id)
+            XCTAssertEqual(due, reset.addingTimeInterval(30), kind)
+
+            _ = await service.refresh(account, now: reset.addingTimeInterval(30))
+            let restarted = await service.nextRefresh(account.id)
+            XCTAssertEqual(restarted, reset.addingTimeInterval(90), kind)
+            _ = await service.refresh(account, now: reset.addingTimeInterval(90))
+            let backedOff = await service.nextRefresh(account.id)
+            XCTAssertEqual(backedOff, reset.addingTimeInterval(210), "old reset must only restart backoff once")
+        }
+    }
+
     func testRateLimitHonoursRetryAfterAndBlocksRequests() async throws {
         let http = ScriptedHTTP(HTTPResponse(status: 429, body: Data("{}".utf8), headers: ["retry-after": "900"]))
         let (service, account) = try await makeService(http)

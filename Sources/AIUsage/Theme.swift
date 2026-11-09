@@ -20,6 +20,7 @@ enum Theme {
 
     static let ok = dynamic("248A3D", "30D158")
     static let warning = dynamic("FF9F0A", "FFD60A")
+    static let exhausted = dynamic("FF3B30", "FF453A")
     static let alert = dynamic("D97757", "E8956E")
     static let muted = dynamic("6B7280", "A1A1AA")
 

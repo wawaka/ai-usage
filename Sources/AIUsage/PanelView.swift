@@ -268,15 +268,16 @@ struct WindowRow: View {
         let idle = window.isUntouched
         let split = window.paceSplit(remaining: remaining, now: now)
         let flat = idle || muted
-        let good = flat ? Color.secondary.opacity(idle ? 0.5 : 1) : Color(nsColor: Theme.ok)
-        let ahead = flat ? good : Color(nsColor: Theme.warning)
+        let exhausted = window.usedPercent >= 100
+        let good = exhausted ? Color(nsColor: Theme.exhausted) : flat ? Color.secondary.opacity(idle ? 0.5 : 1) : Color(nsColor: Theme.ok)
+        let ahead = exhausted || flat ? good : Color(nsColor: Theme.warning)
         let color = flat ? Color.secondary : split.fill > split.onPace ? ahead : good
         // The bar takes all the width between the label and the percent + time-left columns.
         // An untouched window is a plain grey bar: no cursor, no countdown (its clock hasn't started).
         HStack(spacing: 6) {
             Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
                 .lineLimit(1).frame(width: labelWidth, alignment: .leading)
-            Meter(value: shown.percent, onPace: split.onPace, time: shown.time, good: good, ahead: ahead)
+            Meter(value: exhausted ? 100 : shown.percent, onPace: split.onPace, time: shown.time, good: good, ahead: ahead)
                 .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(color).frame(width: 34, alignment: .trailing)

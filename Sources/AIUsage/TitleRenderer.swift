@@ -23,6 +23,7 @@ enum TitleRenderer {
         var time: Double?
         /// Window not started yet: drawn grey, without a cursor.
         var untouched = false
+        var exhausted = false
     }
 
     struct Segment {
@@ -57,7 +58,7 @@ enum TitleRenderer {
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
             var bars = shown.map { w -> Bar in
                 let d = w.display(remaining: remaining, now: now)
-                return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining, now: now).onPace, time: d.time, untouched: w.isUntouched)
+                return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining, now: now).onPace, time: d.time, untouched: w.isUntouched, exhausted: w.usedPercent >= 100)
             }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
@@ -113,7 +114,7 @@ enum TitleRenderer {
                                          xRadius: barRadius, yRadius: barRadius).fill()
                         }
                         capsule(barWidth, barBg)
-                        if bar.percent > 0 { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y)) }
+                        if bar.percent > 0 || bar.exhausted { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y)) }
                         // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
                         if let time = bar.time {
                             drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)
@@ -139,9 +140,14 @@ enum TitleRenderer {
     /// A bar's fill: green up to the point the window's time has reached, amber for what lies past it.
     /// `flat` draws it grey instead (untouched window, or stale data).
     static func fillBar(_ bar: Bar, flat: Bool, at origin: NSPoint) {
-        let width = max(barRadius * 2, (barWidth * min(bar.percent, 100) / 100).rounded())
+        let width = max(barRadius * 2, (barWidth * (bar.exhausted ? 100 : min(bar.percent, 100)) / 100).rounded())
         let rect = NSRect(x: origin.x, y: origin.y, width: width, height: barHeight)
         let path = NSBezierPath(roundedRect: rect, xRadius: barRadius, yRadius: barRadius)
+        if bar.exhausted {
+            Theme.exhausted.setFill()
+            path.fill()
+            return
+        }
         if flat {
             Theme.muted.setFill()
             path.fill()

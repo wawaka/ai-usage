@@ -132,7 +132,12 @@ public actor UsageService {
     private func reschedule(_ id: String, changed: Bool, rateLimited: Bool = false, retryAfter: TimeInterval? = nil,
                             snapshot: UsageSnapshot?, now: Date) {
         var s = schedule[id] ?? PollState(interval: policy.minInterval, nextDue: now)
-        s.interval = changed ? policy.minInterval : min(max(s.interval * 2, policy.minInterval), policy.maxInterval)
+        // Consume each known reset once, even if the endpoint still returns the old window.
+        let resetPassed = lastSnapshots[id]?.windows.compactMap(\.resetsAt).contains {
+            $0 <= now && $0 > (s.lastResetCheck ?? .distantPast)
+        } ?? false
+        if resetPassed { s.lastResetCheck = now }
+        s.interval = changed || resetPassed ? policy.minInterval : min(max(s.interval * 2, policy.minInterval), policy.maxInterval)
         var wait = s.interval
         s.blockedUntil = nil
         if rateLimited {
@@ -308,4 +313,5 @@ struct PollState: Codable {
     var interval: TimeInterval
     var nextDue: Date
     var blockedUntil: Date?
+    var lastResetCheck: Date?
 }
