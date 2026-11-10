@@ -266,6 +266,10 @@ struct SettingsView: View {
                 Picker("Style", selection: $settings.titleStyle) {
                     ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
                 }
+                if settings.titleStyle == .dials {
+                    Text("Clockwise from twelve: inner ring is 7-day usage, outer ring is 5-hour usage. A small tick marks the window’s elapsed time. Providers without these windows show their available quota in the inner ring.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Text("An I-shaped cursor on each usage bar marks how far the window has run toward its reset. Usage past the cursor means you're ahead of pace.")
                     .font(.caption).foregroundStyle(.secondary)
             }

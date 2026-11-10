@@ -17,13 +17,14 @@ enum TitleMode: String, CaseIterable, Identifiable {
 }
 
 enum TitleStyle: String, CaseIterable, Identifiable {
-    case bars, barsAndPercent, percent
+    case bars, barsAndPercent, percent, dials
     var id: String { rawValue }
     var label: String {
         switch self {
         case .bars: return "Bars"
         case .barsAndPercent: return "Bars + percent"
         case .percent: return "Percent"
+        case .dials: return "Compact dials"
         }
     }
 }

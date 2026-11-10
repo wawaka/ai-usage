@@ -1,9 +1,10 @@
 # Provider marks
 
 These SVGs come from [Lobe Icons](https://github.com/lobehub/lobe-icons) (`@lobehub/icons-static-svg`
-1.101.0, MIT). They're the `-color` variants of the Claude, Codex, Zhipu (GLM), DeepSeek, MiniMax and
+1.101.0, MIT). They're the `-color` variants of the Claude, Zhipu (GLM), DeepSeek, MiniMax and
 Kimi icons. Changes from the originals:
 - the `<svg>` root is normalised to a 24×24 box and `<title>` is removed;
+- Codex uses the circular OpenAI knot from [Lobe Icons](https://github.com/lobehub/lobe-icons/blob/master/packages/static-svg/icons/openai.svg), with black and white variants for light and dark appearances;
 - in `kimi.svg` and `kimi-dark.svg`, `currentColor` is replaced with black and white respectively.
 
 The marks and names belong to Anthropic, OpenAI, Zhipu AI, DeepSeek, MiniMax and Moonshot AI. They

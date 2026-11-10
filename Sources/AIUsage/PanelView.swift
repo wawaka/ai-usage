@@ -65,6 +65,9 @@ struct PanelView: View {
             MenuRow(title: "Refresh all now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
             ToggleRow(title: "Show remaining", shortcut: "I", isOn: $settings.showRemaining)
+            ToggleRow(title: "Compact dials", shortcut: "D", isOn: Binding(
+                get: { settings.titleStyle == .dials },
+                set: { settings.titleStyle = $0 ? .dials : .bars }))
             ToggleRow(title: "Account names", shortcut: "N", isOn: $settings.showAccountNames)
             Divider().padding(.vertical, 4).padding(.horizontal, 8)
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)

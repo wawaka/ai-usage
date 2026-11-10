@@ -59,13 +59,13 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         let style = settings.titleStyle
         var mode = settings.titleMode
         let remaining = settings.showRemaining
-        let now = Date()
+        let now = clock.now
         let all = TitleRenderer.segments(for: statuses, remaining: remaining, now: now)
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
             let fullWidth = TitleRenderer.image(for: all, style: style).size.width
-            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= 90 ? .single : .icon
+            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= (style == .dials ? TitleRenderer.height : 90) ? .single : .icon
         }
 
         let image: NSImage

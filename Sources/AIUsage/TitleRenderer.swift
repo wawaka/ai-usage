@@ -30,6 +30,8 @@ enum TitleRenderer {
         var provider: ProviderKind
         var badge: Int?
         var bars: [Bar]
+        /// Fixed inner (7d) and outer (5h) slots; missing windows keep their position.
+        var dialBars: [Bar?]
         var percents: [Double]
         var state: UsageState?
         var balanceText: String?
@@ -56,15 +58,17 @@ enum TitleRenderer {
             let five = windows.first { $0.kind == .fiveHour }, seven = windows.first { $0.kind == .sevenDay }
             var shown = [five, seven].compactMap { $0 }
             if shown.isEmpty { shown = Array(windows.prefix(2)) }
-            var bars = shown.map { w -> Bar in
+            func bar(for w: UsageWindow) -> Bar {
                 let d = w.display(remaining: remaining, now: now)
                 return Bar(percent: d.percent, onPace: w.paceSplit(remaining: remaining, now: now).onPace, time: d.time, untouched: w.isUntouched, exhausted: w.usedPercent >= 100)
             }
+            var bars = shown.map { bar(for: $0) }
             let balance = s.snapshot?.balance
             // Balance-only providers get one full bar, like the reference (green when available).
             if bars.isEmpty, let balance { bars = [Bar(percent: balance.isAvailable ? 100 : 0, onPace: balance.isAvailable ? 100 : 0)] }
             if bars.isEmpty { bars = [Bar(percent: 0, onPace: 0)] }
             return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
+                           dialBars: (five != nil || seven != nil) ? [seven.map { bar(for: $0) }, five.map { bar(for: $0) }] : [bars.first, nil],
                            percents: [five, seven].compactMap { $0?.display(remaining: remaining, now: now).percent },
                            state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
                            balanceText: balance?.formatted)
@@ -77,6 +81,7 @@ enum TitleRenderer {
     }
 
     static func width(of seg: Segment, style: TitleStyle) -> CGFloat {
+        if style == .dials { return height }
         var w = iconSize
         if style != .percent { w += iconBarGap + barWidth }
         if style != .bars, let t = text(for: seg) {
@@ -86,6 +91,7 @@ enum TitleRenderer {
     }
 
     static func image(for segs: [Segment], style: TitleStyle) -> NSImage {
+        if style == .dials { return dialImage(for: segs) }
         let widths = segs.map { width(of: $0, style: style) }
         let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * (segmentGap * 2 + 1)
         let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
@@ -129,6 +135,55 @@ enum TitleRenderer {
                     let size = s.size()
                     s.draw(at: NSPoint(x: x, y: (height - size.height) / 2))
                     x += ceil(size.width)
+                }
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// One square per account. Concentric rings run clockwise from twelve o'clock.
+    static func dialImage(for segments: [Segment]) -> NSImage {
+        let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * height), height: height), flipped: false) { _ in
+            let dark = Theme.isDark(nil)
+            let track = (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.22)
+            for (index, segment) in segments.enumerated() {
+                let center = NSPoint(x: CGFloat(index) * height + height / 2, y: height / 2)
+                Theme.drawMark(segment.provider, in: NSRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8), badge: segment.badge)
+                for (slot, bar) in segment.dialBars.enumerated() {
+                    let radius: CGFloat = slot == 0 ? 6.75 : 9.25
+                    func arc(from start: Double, to end: Double, color: NSColor) {
+                        guard end > start else { return }
+                        let path = NSBezierPath()
+                        path.appendArc(withCenter: center, radius: radius,
+                                       startAngle: CGFloat(90 - start * 360), endAngle: CGFloat(90 - end * 360), clockwise: true)
+                        path.lineWidth = 2.0
+                        path.lineCapStyle = .butt
+                        color.setStroke()
+                        path.stroke()
+                    }
+                    arc(from: 0, to: 1, color: track)
+                    guard let bar else { continue }
+                    let fraction = min(max(bar.exhausted ? 1 : bar.percent / 100, 0), 1)
+                    if bar.exhausted || bar.untouched || segment.state == .unavailable {
+                        arc(from: 0, to: fraction, color: bar.exhausted ? Theme.exhausted : Theme.muted)
+                    } else {
+                        let good = min(max(bar.onPace / 100, 0), fraction)
+                        arc(from: 0, to: good, color: Theme.ok)
+                        arc(from: good, to: fraction, color: Theme.warning)
+                    }
+                    if let time = bar.time {
+                        let angle = (90 - min(max(time, 0), 1) * 360) * Double.pi / 180
+                        let guide = NSBezierPath()
+                        for (i, r) in [radius - 1.25, radius + 1.25].enumerated() {
+                            let point = NSPoint(x: center.x + r * CGFloat(cos(angle)), y: center.y + r * CGFloat(sin(angle)))
+                            if i == 0 { guide.move(to: point) } else { guide.line(to: point) }
+                        }
+                        guide.lineWidth = 0.75
+                        (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.65).setStroke()
+                        guide.stroke()
+                    }
                 }
             }
             return true
