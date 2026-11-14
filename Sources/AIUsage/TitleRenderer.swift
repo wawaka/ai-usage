@@ -93,13 +93,21 @@ enum TitleRenderer {
         if style == .dials { return height }
         if style == .verticalBars { return configuration.vertical.logoPosition.isBesideBars ? height : height / 2 }
         if style == .bars {
-            let logoWidth = configuration.horizontal.logoStyle == .half ? iconSize / 2 : iconSize
-            return logoWidth + iconBarGap + CGFloat(configuration.horizontal.effectiveBarLength)
+            let logoWidth = horizontalLogoWidth(configuration.horizontal.logoStyle)
+            return logoWidth + (logoWidth > 0 ? iconBarGap : 0) + CGFloat(configuration.horizontal.effectiveBarLength)
         }
         let textWidth = numberRows(for: seg).map {
             ceil(NSAttributedString(string: $0.0, attributes: [.font: numberFont]).size().width)
         }.max() ?? 0
         return iconSize + iconBarGap + textWidth
+    }
+
+    private static func horizontalLogoWidth(_ style: HorizontalLogoStyle) -> CGFloat {
+        switch style {
+        case .full: return iconSize
+        case .half: return iconSize / 2
+        case .off: return 0
+        }
     }
 
     static func image(for segs: [Segment], configuration: DisplayStyleSettings) -> NSImage {
@@ -108,7 +116,7 @@ enum TitleRenderer {
         if style == .verticalBars { return verticalImage(for: segs, options: configuration.vertical) }
         let barWidth = CGFloat(configuration.horizontal.effectiveBarLength)
         let halfLogo = style == .bars && configuration.horizontal.logoStyle == .half
-        let logoWidth = halfLogo ? iconSize / 2 : iconSize
+        let logoWidth = style == .bars ? horizontalLogoWidth(configuration.horizontal.logoStyle) : iconSize
         let showSeparators = style != .bars || configuration.horizontal.showSeparators
         let accountGap = showSeparators ? segmentGap * 2 + 1 : segmentGap
         let widths = segs.map { width(of: $0, configuration: configuration) }
@@ -132,11 +140,11 @@ enum TitleRenderer {
                     NSBezierPath(ovalIn: markRect).addClip()
                     NSBezierPath(rect: NSRect(x: x, y: markRect.minY, width: logoWidth, height: iconSize)).addClip()
                 }
-                Theme.drawMark(seg.provider, in: markRect, badge: seg.badge)
+                if logoWidth > 0 { Theme.drawMark(seg.provider, in: markRect, badge: seg.badge) }
                 NSGraphicsContext.restoreGraphicsState()
                 x += logoWidth
                 if style != .percent {
-                    x += iconBarGap
+                    if logoWidth > 0 { x += iconBarGap }
                     let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
                     var y = floor((height + totalH) / 2) - barHeight
                     for bar in seg.bars {

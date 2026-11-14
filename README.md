@@ -85,7 +85,7 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 
 **Settings also has:**
 - the menu bar layout (all accounts, most urgent only, or just an icon)
-- options for the selected style: full/half logos, separators, bar length (24–120 pt) and pace
+- options for the selected style: full/half/off logos, separators, bar length (24–120 pt) and pace
   markers for horizontal menu bar meters; logo position (top, bottom,
   left, right or off) and pace markers for vertical bars; ring width, ring gap, logo size and pace
   markers for dials. Numbers always show 5-hour usage above 7-day usage, colored like the meters.
