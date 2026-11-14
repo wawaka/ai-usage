@@ -76,6 +76,7 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 
 **Customising.** The switches at the bottom of the dropdown cover the common options:
 - **Show remaining** (⌘I): quota left instead of used.
+- **Style:** choose Horizontal bars, Vertical bars, Circular dials or Numbers.
 - **Account names** (⌘N): hide emails, e.g. for screenshots.
 
 **Per account:**
@@ -83,7 +84,10 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 - **Hide:** remove it from the list. Bring it back in Accounts….
 
 **Settings also has:**
-- the menu bar layout (all accounts, most urgent only, or just an icon) and style (bars, percentages, or both)
+- the menu bar layout (all accounts, most urgent only, or just an icon)
+- options for the selected style: percentages and pace markers for horizontal bars, logo position
+  and pace markers for vertical bars, pace markers for dials, and usage colors for numbers.
+  Each style remembers its options when you switch away and back.
 - how often to check
 
 ## Privacy

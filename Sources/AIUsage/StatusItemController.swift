@@ -38,8 +38,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () },
                                   settings.$showAccountNames.map { _ in () })
-            .combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
-            .combineLatest(settings.$verticalLogosOnTop)
+            .combineLatest(settings.$titleMode, settings.$displayStyle, settings.$showRemaining)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
             .store(in: &cancellables)
@@ -57,7 +56,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
     func render() {
         guard let button = item.button else { return }
         let statuses = model.statuses.filter { !model.notInMenuBarIDs.contains($0.id) }
-        let style = settings.titleStyle
+        let configuration = settings.displayStyle
         var mode = settings.titleMode
         let remaining = settings.showRemaining
         let now = clock.now
@@ -65,17 +64,21 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
-            let fullWidth = TitleRenderer.image(for: all, style: style, logosOnTop: settings.verticalLogosOnTop).size.width
-            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= (style == .verticalBars ? TitleRenderer.height / 2 : style == .dials ? TitleRenderer.height : 90) ? .single : .icon
+            let fullWidth = TitleRenderer.image(for: all, configuration: configuration).size.width
+            let urgentSegment = TitleRenderer.mostUrgent(statuses).flatMap { urgent in
+                TitleRenderer.segments(for: [urgent], remaining: remaining, now: now).first
+            }
+            let singleWidth = urgentSegment.map { TitleRenderer.width(of: $0, configuration: configuration) } ?? 0
+            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= singleWidth ? .single : .icon
         }
 
         let image: NSImage
         switch mode {
         case .full where !all.isEmpty:
-            image = TitleRenderer.image(for: all, style: style, logosOnTop: settings.verticalLogosOnTop)
+            image = TitleRenderer.image(for: all, configuration: configuration)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, now: now), style: style, logosOnTop: settings.verticalLogosOnTop)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, now: now), configuration: configuration)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }
