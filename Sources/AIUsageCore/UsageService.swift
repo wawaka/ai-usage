@@ -103,6 +103,23 @@ public actor UsageService {
         snapshotStore.save(lastSnapshots)
     }
 
+    /// Replaces only AI Usage's own Claude login, preserving account identity and preferences.
+    public func reauthenticateClaude(_ account: Account, label: String, token: OAuthToken) throws {
+        guard account.provider == .claude, !account.isLocal,
+              let index = state.managed.firstIndex(where: { $0.id == account.id && $0.provider == .claude }) else {
+            throw UsageError.other("Only a Claude account added in AI Usage can be signed in again here")
+        }
+        try secrets.save(.oauth(token), for: account.id)
+        state.managed[index].label = label
+        // The browser may select a different account. Don't carry its old usage or plan forward.
+        lastSnapshots[account.id] = nil
+        schedule[account.id] = nil
+        planLookups.remove(account.id)
+        stateStore.save(state)
+        snapshotStore.save(lastSnapshots)
+        scheduleStore.save(schedule)
+    }
+
     // MARK: Schedule
 
     public func setPolicy(_ policy: PollPolicy) {
@@ -202,6 +219,11 @@ public actor UsageService {
         } catch UsageError.rateLimited(let retryAfter) {
             reschedule(account.id, changed: false, rateLimited: true, retryAfter: retryAfter, snapshot: stale, now: now)
             return failed(account, stale, Self.rateLimitMessage(until: schedule[account.id]!.nextDue))
+        } catch UsageError.unauthorized where account.provider == .claude && !account.isLocal {
+            reschedule(account.id, changed: false, snapshot: stale, now: now)
+            var status = failed(account, stale, "Claude session expired. Sign in again to update usage.")
+            status.requiresSignIn = true
+            return status
         } catch {
             reschedule(account.id, changed: false, snapshot: stale, now: now)
             return failed(account, stale, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)

@@ -110,9 +110,20 @@ public struct ClaudeOAuth: OAuthProvider {
 
     public func refresh(_ token: OAuthToken, client: HTTPClient) async throws -> OAuthToken {
         guard let rt = token.refreshToken else { throw UsageError.unauthorized("no refresh token; sign in again") }
-        return try tokenFromResponse(try await post([
-            "grant_type": "refresh_token", "refresh_token": rt, "client_id": Self.clientID,
-        ], client: client), previous: token)
+        do {
+            return try tokenFromResponse(try await post([
+                "grant_type": "refresh_token", "refresh_token": rt, "client_id": Self.clientID,
+            ], client: client), previous: token)
+        } catch UsageError.http(let status, let body) {
+            // Claude rejects revoked/expired refresh tokens with 400 rather than 401.
+            // Only classify the structured OAuth code, never arbitrary response text.
+            if status == 400,
+               let obj = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
+               obj["error"] as? String == "invalid_grant" {
+                throw UsageError.unauthorized("Claude session expired; sign in again")
+            }
+            throw UsageError.http(status, body)
+        }
     }
 
     public func identity(_ token: OAuthToken, client: HTTPClient) async -> String? {

@@ -8,6 +8,11 @@ final class Flag: ObservableObject {
 }
 
 @MainActor
+final class LoginPresentation: ObservableObject {
+    @Published var login: LoginController?
+}
+
+@MainActor
 final class AccountsUIState: ObservableObject {
     @Published var adding: ProviderKind?
     @Published var renaming: Account?
@@ -134,7 +139,9 @@ struct OAuthLoginSheet: View {
             }
             switch login.phase {
             case .idle:
-                Text("Your browser will open the \(login.provider.displayName) sign-in page. The account you choose is added to AI Usage only; other apps' logins are not touched.")
+                Text(login.replacing != nil
+                     ? "Your browser will open the Claude sign-in page. Sign in to the same account to reconnect it. This replaces its AI Usage login; other apps' logins are not touched."
+                     : "Your browser will open the \(login.provider.displayName) sign-in page. The account you choose is added to AI Usage only; other apps' logins are not touched.")
                     .fixedSize(horizontal: false, vertical: true)
                 if login.provider == .claude {
                     Text("To add another account, switch accounts on claude.ai in the browser first.").font(.caption).foregroundStyle(.secondary)
@@ -162,7 +169,7 @@ struct OAuthLoginSheet: View {
             case .exchanging:
                 HStack { ProgressView().controlSize(.small); Text("Finishing sign-in…") }
             case .done(let label):
-                Label("Added \(label)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("\(login.replacing != nil ? "Reconnected" : "Added") \(label)", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
             case .failed(let message):
                 Text(message).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
             }

@@ -85,7 +85,8 @@ final class LoopbackServer: @unchecked Sendable {
 
 /// Drives a browser sign-in for one new account.
 @MainActor
-final class LoginController: ObservableObject {
+final class LoginController: ObservableObject, Identifiable {
+    let id = UUID()
     enum Phase: Equatable {
         case idle
         case waiting(url: URL, canPaste: Bool, manual: Bool)
@@ -97,6 +98,7 @@ final class LoginController: ObservableObject {
     @Published var phase: Phase = .idle
     @Published var pasted = ""
     let provider: ProviderKind
+    let replacing: Account?
     private let model: AppModel
     private let oauth: OAuthProvider
     private let client = URLSessionHTTPClient()
@@ -105,9 +107,11 @@ final class LoginController: ObservableObject {
     private var server: LoopbackServer?
     private var task: Task<Void, Never>?
 
-    init?(provider: ProviderKind, model: AppModel) {
+    init?(provider: ProviderKind, model: AppModel, replacing: Account? = nil) {
         guard let oauth = OAuthProviders.forProvider(provider) else { return nil }
+        if let replacing, replacing.provider != .claude || replacing.isLocal || provider != .claude { return nil }
         self.provider = provider
+        self.replacing = replacing
         self.model = model
         self.oauth = oauth
     }
@@ -160,7 +164,11 @@ final class LoginController: ObservableObject {
         do {
             let token = try await oauth.exchange(code: code, pkce: pkce, redirectURI: redirectURI, client: client)
             let label = await oauth.identity(token, client: client) ?? "\(provider.displayName) account"
-            try await model.addManaged(provider: provider, label: label, credential: .oauth(token))
+            if let replacing {
+                try await model.reauthenticateClaude(replacing, label: label, token: token)
+            } else {
+                try await model.addManaged(provider: provider, label: label, credential: .oauth(token))
+            }
             phase = .done(label)
         } catch {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? error.localizedDescription)

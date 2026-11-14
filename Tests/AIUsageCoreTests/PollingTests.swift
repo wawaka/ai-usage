@@ -138,3 +138,87 @@ extension PollingTests {
         XCTAssertEqual(profileCalls, 1, "profile is asked once, not on every poll")
     }
 }
+
+extension PollingTests {
+    func testClaudeInvalidGrantOffersSignInAndReconnectsExistingAccount() async throws {
+        let secrets = MemorySecrets()
+        let http = ScriptedHTTP(Self.usage(10))
+        let service = UsageService(secrets: secrets, client: http, home: dir, directory: dir)
+        let account = try await service.addManaged(provider: .claude, label: "a@b.c",
+            credential: .oauth(OAuthToken(accessToken: "old", refreshToken: "revoked", expiresAt: .distantFuture)))
+        let initial = await service.refresh(account)
+        await service.setInMenuBar(account.id, false)
+        await service.rename(account.id, to: "My Claude")
+        // A 401 on usage causes a refresh, whose invalid_grant must become an actionable state.
+        let revoked = MockHTTP { request in
+            if request.url?.path.hasSuffix("/oauth/token") == true {
+                return (400, #"{"error":"invalid_grant","error_description":"Refresh token not found or invalid"}"#)
+            }
+            return (401, #"{"error":"unauthorized"}"#)
+        }
+        let expiredService = UsageService(secrets: secrets, client: revoked, home: dir, directory: dir)
+        let failed = await expiredService.refresh(account)
+        XCTAssertTrue(failed.requiresSignIn)
+        XCTAssertEqual(failed.snapshot, initial.snapshot, "keep last usage muted until sign-in succeeds")
+        XCTAssertEqual(failed.error, "Claude session expired. Sign in again to update usage.")
+        XCTAssertEqual(revoked.requests.count, 2, "invalid_grant must not retry the legacy host")
+        let token = OAuthToken(accessToken: "new", refreshToken: "new-refresh", expiresAt: .distantFuture)
+        try await expiredService.reauthenticateClaude(account, label: "a@b.c", token: token)
+        let accounts = await expiredService.allAccounts()
+        XCTAssertEqual(accounts.count, 1)
+        XCTAssertEqual(accounts.first?.id, account.id)
+        XCTAssertEqual(accounts.first?.label, "My Claude")
+        let state = await expiredService.state
+        XCTAssertTrue(state.notInMenuBar.contains(account.id))
+        XCTAssertEqual(secrets.load(account.id), .oauth(token))
+        let due = await expiredService.nextRefresh(account.id)
+        XCTAssertNil(due, "reconnecting clears old backoff")
+        http.next = Self.usage(20)
+        let restoredService = UsageService(secrets: secrets, client: http, home: dir, directory: dir)
+        let restored = await restoredService.refresh(account)
+        XCTAssertFalse(restored.requiresSignIn)
+        XCTAssertNil(restored.error)
+        XCTAssertEqual(restored.snapshot?.fiveHour?.usedPercent, 20)
+    }
+
+    func testClaudeExpiredTokenInvalidGrantAndMissingRefreshTokenOfferSignIn() async throws {
+        for refreshToken: String? in ["revoked", nil] {
+            let http = ScriptedHTTP(HTTPResponse(status: 400, body: Data(
+                #"{"error":"invalid_grant","error_description":"Refresh token not found or invalid"}"#.utf8)))
+            let service = UsageService(secrets: MemorySecrets(), client: http, home: dir, directory: dir)
+            let account = try await service.addManaged(provider: .claude, label: "a",
+                credential: .oauth(OAuthToken(accessToken: "old", refreshToken: refreshToken, expiresAt: .distantPast)))
+            let status = await service.refresh(account)
+            XCTAssertTrue(status.requiresSignIn)
+            XCTAssertEqual(http.count, refreshToken == nil ? 0 : 1)
+        }
+    }
+
+    func testOtherClaudeFailuresAndCodexInvalidGrantKeepExistingErrorHandling() async throws {
+        for (provider, code, body) in [
+            (ProviderKind.claude, 400, #"{"error":"invalid_request"}"#),
+            (.claude, 500, #"{"error":"invalid_grant"}"#),
+            (.codex, 400, #"{"error":"invalid_grant"}"#)
+        ] {
+            let http = ScriptedHTTP(HTTPResponse(status: code, body: Data(body.utf8)))
+            let service = UsageService(secrets: MemorySecrets(), client: http, home: dir, directory: dir)
+            let account = try await service.addManaged(provider: provider, label: "a",
+                credential: .oauth(OAuthToken(accessToken: "old", refreshToken: "r", expiresAt: .distantPast)))
+            let status = await service.refresh(account)
+            XCTAssertFalse(status.requiresSignIn)
+            XCTAssertTrue(status.error?.contains("HTTP \(code)") == true)
+        }
+    }
+
+    func testReauthenticationRejectsLocalClaudeAndCodexAccounts() async throws {
+        let service = UsageService(secrets: MemorySecrets(), home: dir, directory: dir)
+        let codex = try await service.addManaged(provider: .codex, label: "a", credential: .oauth(OAuthToken(accessToken: "old")))
+        let local = Account(id: "local:claude", provider: .claude, label: "a", origin: .local(source: "Claude Code"))
+        for account in [codex, local] {
+            do {
+                try await service.reauthenticateClaude(account, label: "a", token: OAuthToken(accessToken: "new"))
+                XCTFail("must not replace another tool's credentials or change Codex")
+            } catch {}
+        }
+    }
+}
