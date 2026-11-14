@@ -159,7 +159,10 @@ extension PollingTests {
         let expiredService = UsageService(secrets: secrets, client: revoked, home: dir, directory: dir)
         let failed = await expiredService.refresh(account)
         XCTAssertTrue(failed.requiresSignIn)
-        XCTAssertEqual(failed.snapshot, initial.snapshot, "keep last usage muted until sign-in succeeds")
+        XCTAssertEqual(failed.snapshot?.windows, initial.snapshot?.windows, "keep last usage muted until sign-in succeeds")
+        // JSON timestamps can lose sub-second precision across the service restart.
+        XCTAssertEqual(try XCTUnwrap(failed.snapshot).observedAt.timeIntervalSince1970,
+                       try XCTUnwrap(initial.snapshot).observedAt.timeIntervalSince1970, accuracy: 1)
         XCTAssertEqual(failed.error, "Claude session expired. Sign in again to update usage.")
         XCTAssertEqual(revoked.requests.count, 2, "invalid_grant must not retry the legacy host")
         let token = OAuthToken(accessToken: "new", refreshToken: "new-refresh", expiresAt: .distantFuture)
