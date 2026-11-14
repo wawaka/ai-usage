@@ -40,6 +40,9 @@ final class DisplayStyleTests: XCTestCase {
         let settings = try JSONDecoder().decode(DisplayStyleSettings.self, from: old)
         XCTAssertEqual(settings.style, .percent)
         XCTAssertFalse(settings.horizontal.showPace)
+        XCTAssertEqual(settings.horizontal.logoStyle, .full)
+        XCTAssertTrue(settings.horizontal.showSeparators)
+        XCTAssertEqual(settings.horizontal.effectiveBarLength, 48)
         XCTAssertEqual(settings.vertical.logoPosition, .top)
         XCTAssertFalse(settings.vertical.showPace)
         XCTAssertFalse(settings.dial.showPace)
@@ -53,6 +56,26 @@ final class DisplayStyleTests: XCTestCase {
             var settings = DisplayStyleSettings()
             settings.vertical.logoPosition = position
             XCTAssertEqual(try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings)), settings)
+        }
+    }
+
+    func testHorizontalOptionsPersistIndependentlyOfOtherStyles() throws {
+        var settings = DisplayStyleSettings()
+        settings.horizontal.logoStyle = .half
+        settings.horizontal.showSeparators = false
+        settings.horizontal.barLength = 86
+        settings.style = .dials
+        let restored = try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(restored, settings)
+        XCTAssertEqual(restored.vertical, VerticalBarSettings())
+        XCTAssertEqual(restored.dial, DialSettings())
+    }
+
+    func testHorizontalLengthIsBoundedForSavedOutOfRangeValues() {
+        var options = HorizontalBarSettings()
+        for (saved, expected) in [(0.0, 24.0), (24, 24), (48, 48), (120, 120), (1000, 120), (.infinity, 48), (.nan, 48)] {
+            options.barLength = saved
+            XCTAssertEqual(options.effectiveBarLength, expected)
         }
     }
 

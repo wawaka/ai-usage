@@ -18,8 +18,19 @@ private struct HorizontalBarsSettingsView: View {
     @Binding var options: HorizontalBarSettings
 
     var body: some View {
+        Picker("Logo", selection: $options.logoStyle) {
+            ForEach(HorizontalLogoStyle.allCases) { Text($0.label).tag($0) }
+        }
+        Toggle("Show separators", isOn: $options.showSeparators)
+        HStack {
+            Text("Bar length")
+            Slider(value: $options.barLength, in: 24...120, step: 2)
+                .accessibilityLabel("Menu bar length")
+            Text("\(options.effectiveBarLength, specifier: "%.0f") pt")
+                .monospacedDigit().frame(width: 48, alignment: .trailing)
+        }
         Toggle("Show pace markers", isOn: $options.showPace)
-        Text("5-hour usage is above 7-day usage. Pace markers show how far each window has run toward its reset.")
+        Text("These settings affect the menu bar only. Half logos show the left half of each provider mark. 5-hour usage is above 7-day usage; pace markers show progress toward reset.")
             .font(.caption).foregroundStyle(.secondary)
     }
 }
