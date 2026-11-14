@@ -85,8 +85,7 @@ final class LoopbackServer: @unchecked Sendable {
 
 /// Drives a browser sign-in for one new account.
 @MainActor
-final class LoginController: ObservableObject, Identifiable {
-    let id = UUID()
+final class LoginController: ObservableObject {
     enum Phase: Equatable {
         case idle
         case waiting(url: URL, canPaste: Bool, manual: Bool)

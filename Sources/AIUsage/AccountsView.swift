@@ -8,11 +8,6 @@ final class Flag: ObservableObject {
 }
 
 @MainActor
-final class LoginPresentation: ObservableObject {
-    @Published var login: LoginController?
-}
-
-@MainActor
 final class AccountsUIState: ObservableObject {
     @Published var adding: ProviderKind?
     @Published var renaming: Account?

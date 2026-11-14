@@ -4,6 +4,7 @@ import SwiftUI
 struct PanelActions {
     var openAccounts: () -> Void
     var openSettings: () -> Void
+    var signInAgain: (Account) -> Void
     var quit: () -> Void
 }
 
@@ -15,7 +16,6 @@ struct PanelView: View {
     /// Every tick (each minute, on wake, when the dropdown opens) redraws the time-dependent values.
     @ObservedObject var clock: Clock
     let actions: PanelActions
-    @StateObject private var loginUI = LoginPresentation()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -32,10 +32,6 @@ struct PanelView: View {
             footer.padding(.horizontal, 8).padding(.vertical, 6)
         }
         .frame(width: 380)
-        .sheet(item: $loginUI.login) { login in
-            OAuthLoginSheet(login: login) { loginUI.login = nil }
-                .onDisappear { login.cancel() }
-        }
     }
 
     private var sections: some View {
@@ -49,7 +45,7 @@ struct PanelView: View {
                                                   set: { model.setInMenuBar(status.account, $0) }),
                                hide: { model.setHidden(status.account, true) },
                                reload: { model.refresh(status.account) },
-                               signIn: { loginUI.login = LoginController(provider: .claude, model: model, replacing: status.account) })
+                               signIn: { actions.signInAgain(status.account) })
                     .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
@@ -169,7 +165,7 @@ struct AccountSection: View {
             HStack(alignment: .top, spacing: 8) {
                 ProviderMark(provider: status.account.provider, size: 20).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 0) {
-                    // Title on the left; per-account controls share its line on the right.
+                    // Title and plan get their own line so the badge stays readable.
                     HStack(alignment: .center, spacing: 6) {
                         Text(status.account.provider.displayName).font(.system(size: 14, weight: .semibold))
                             .lineLimit(1).layoutPriority(1)
@@ -271,7 +267,7 @@ struct StateBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(Capsule().fill(color.opacity(0.18)))
             .foregroundStyle(color)
