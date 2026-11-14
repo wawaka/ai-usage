@@ -85,8 +85,9 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 
 **Settings also has:**
 - the menu bar layout (all accounts, most urgent only, or just an icon)
-- options for the selected style: percentages and pace markers for horizontal bars, logo position
-  and pace markers for vertical bars, pace markers for dials, and usage colors for numbers.
+- options for the selected style: pace markers for horizontal bars; logo position (top, bottom,
+  left, right or off) and pace markers for vertical bars; ring width, ring gap, logo size and pace
+  markers for dials. Numbers always show 5-hour usage above 7-day usage, colored like the meters.
   Each style remembers its options when you switch away and back.
 - how often to check
 

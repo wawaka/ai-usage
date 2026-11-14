@@ -13,7 +13,6 @@ enum TitleRenderer {
     static let barHeight: CGFloat = 4
     static let barGap: CGFloat = 3
     static let barRadius: CGFloat = 2
-    static let percentFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
 
     struct Bar {
         var percent: Double
@@ -32,7 +31,7 @@ enum TitleRenderer {
         var bars: [Bar]
         /// Fixed inner (7d) and outer (5h) slots; missing windows keep their position.
         var dialBars: [Bar?]
-        var percents: [Double]
+        var numberBars: [Bar?]
         var state: UsageState?
         var balanceText: String?
 
@@ -69,27 +68,36 @@ enum TitleRenderer {
             if bars.isEmpty { bars = [Bar(percent: 0, onPace: 0)] }
             return Segment(provider: p, badge: (counts[p] ?? 0) > 1 ? seen[p] : nil, bars: bars,
                            dialBars: (five != nil || seven != nil) ? [seven.map { bar(for: $0) }, five.map { bar(for: $0) }] : [bars.first, nil],
-                           percents: [five, seven].compactMap { $0?.display(remaining: remaining, now: now).percent },
+                           numberBars: [five.map { bar(for: $0) }, seven.map { bar(for: $0) }],
                            state: s.error != nil && s.snapshot == nil ? .unavailable : s.analysis?.state,
                            balanceText: balance?.formatted)
         }
     }
 
-    static func text(for seg: Segment) -> String? {
-        if !seg.percents.isEmpty { return seg.percents.map(Format.percent).joined(separator: "·") }
-        return seg.balanceText
+    private static let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
+
+    static func numberRows(for segment: Segment) -> [(String, NSColor)] {
+        if let balance = segment.balanceText { return [(balance, segment.textColor)] }
+        // Fixed slots: a missing 5h value must not move 7d into the upper row.
+        return segment.numberBars.map { bar in
+            guard let bar else { return ("—", Theme.muted) }
+            let color: NSColor
+            if segment.state == .unavailable || bar.untouched { color = Theme.muted }
+            else if bar.exhausted { color = Theme.exhausted }
+            else { color = bar.percent > bar.onPace ? Theme.warning : Theme.ok }
+            return (Format.percent(bar.percent), color)
+        }
     }
 
     static func width(of seg: Segment, configuration: DisplayStyleSettings) -> CGFloat {
         let style = configuration.style
         if style == .dials { return height }
-        if style == .verticalBars { return height / 2 }
-        var w = iconSize
-        if style != .percent { w += iconBarGap + barWidth }
-        if style == .percent || configuration.horizontal.showPercent, let t = text(for: seg) {
-            w += iconBarGap + ceil(NSAttributedString(string: t, attributes: [.font: percentFont]).size().width)
-        }
-        return w
+        if style == .verticalBars { return configuration.vertical.logoPosition.isBesideBars ? height : height / 2 }
+        if style == .bars { return iconSize + iconBarGap + barWidth }
+        let textWidth = numberRows(for: seg).map {
+            ceil(NSAttributedString(string: $0.0, attributes: [.font: numberFont]).size().width)
+        }.max() ?? 0
+        return iconSize + iconBarGap + textWidth
     }
 
     static func image(for segs: [Segment], configuration: DisplayStyleSettings) -> NSImage {
@@ -112,7 +120,6 @@ enum TitleRenderer {
                 }
                 Theme.drawMark(seg.provider, in: NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize), badge: seg.badge)
                 x += iconSize
-                let fill = seg.textColor
                 if style != .percent {
                     x += iconBarGap
                     let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
@@ -133,12 +140,16 @@ enum TitleRenderer {
                     }
                     x += barWidth
                 }
-                if style == .percent || configuration.horizontal.showPercent, let t = text(for: seg) {
+                if style == .percent {
                     x += iconBarGap
-                    let s = NSAttributedString(string: t, attributes: [.font: percentFont, .foregroundColor: style == .percent && !configuration.numbers.colorByUsage ? NSColor.labelColor : fill])
-                    let size = s.size()
-                    s.draw(at: NSPoint(x: x, y: (height - size.height) / 2))
-                    x += ceil(size.width)
+                    let rows = numberRows(for: seg)
+                    let rowHeight = height / CGFloat(max(1, rows.count))
+                    for (row, value) in rows.enumerated() {
+                        let text = NSAttributedString(string: value.0, attributes: [.font: numberFont, .foregroundColor: value.1])
+                        let y = height - CGFloat(row + 1) * rowHeight + (rowHeight - text.size().height) / 2
+                        text.draw(at: NSPoint(x: x, y: y))
+                    }
+                    x += widths[i] - iconSize - iconBarGap
                 }
             }
             return true
@@ -147,29 +158,41 @@ enum TitleRenderer {
         return image
     }
 
-    /// Half-height-wide tiles with a semicircular provider mark beneath two vertical meters.
+    /// One tile per account, with an optional half-logo on any edge.
     static func verticalImage(for segments: [Segment], options: VerticalBarSettings) -> NSImage {
-        let logosOnTop = options.logosOnTop
-        let tileWidth = height / 2
+        let position = options.logoPosition
+        let tileWidth = position.isBesideBars ? height : height / 2
         let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * tileWidth), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
             let ink = dark ? NSColor.white : NSColor.black
             for (index, segment) in segments.enumerated() {
                 let x = CGFloat(index) * tileWidth
-                NSGraphicsContext.saveGraphicsState()
-                // Keep artwork upright; choose the upper or lower semicircle.
-                let markY: CGFloat = logosOnTop ? height - 10 : 1
-                let cropY: CGFloat = logosOnTop ? height - 5.5 : 1
-                let markRect = NSRect(x: x + 1, y: markY, width: 9, height: 9)
-                NSBezierPath(ovalIn: markRect).addClip()
-                NSBezierPath(rect: NSRect(x: x + 1, y: cropY, width: 9, height: 4.5)).addClip()
-                NSGraphicsContext.current?.cgContext.setAlpha(0.65)
-                Theme.drawMark(segment.provider, in: markRect)
-                NSGraphicsContext.restoreGraphicsState()
+                if position != .off {
+                    NSGraphicsContext.saveGraphicsState()
+                    let markRect: NSRect
+                    let cropRect: NSRect
+                    if position.isBesideBars {
+                        markRect = NSRect(x: x + 1, y: 1, width: 20, height: 20)
+                        cropRect = NSRect(x: position == .left ? x : x + 11, y: 1, width: 11, height: 20)
+                    } else {
+                        let top = position == .top
+                        markRect = NSRect(x: x + 1, y: top ? height - 10 : 1, width: 9, height: 9)
+                        cropRect = NSRect(x: x + 1, y: top ? height - 5.5 : 1, width: 9, height: 4.5)
+                    }
+                    NSBezierPath(ovalIn: markRect).addClip()
+                    NSBezierPath(rect: cropRect).addClip()
+                    NSGraphicsContext.current?.cgContext.setAlpha(0.65)
+                    Theme.drawMark(segment.provider, in: markRect)
+                    NSGraphicsContext.restoreGraphicsState()
+                }
 
-                // Dial slots are [7d, 5h]; vertical meters read [5h, 7d].
+                // Each tile repeats its own half-logo and [5h, 7d] pair.
+                let fullHeight = position.isBesideBars || position == .off
+                let barsX = x + (position == .left ? 12 : 1)
                 for (slot, bar) in segment.dialBars.reversed().enumerated() {
-                    let rect = NSRect(x: x + 1 + CGFloat(slot) * 5, y: logosOnTop ? 1 : 6.5, width: 4, height: height - 7.5)
+                    let rect = NSRect(x: barsX + CGFloat(slot) * 5,
+                                      y: fullHeight || position == .top ? 1 : 6.5,
+                                      width: 4, height: fullHeight ? height - 2 : height - 7.5)
                     ink.withAlphaComponent(0.12).setFill()
                     NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1).fill()
                     guard let bar else { continue }
@@ -209,15 +232,17 @@ enum TitleRenderer {
             let track = (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.22)
             for (index, segment) in segments.enumerated() {
                 let center = NSPoint(x: CGFloat(index) * height + height / 2, y: height / 2)
-                Theme.drawMark(segment.provider, in: NSRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8), badge: segment.badge)
+                let logoSize = CGFloat(options.effectiveIconSize)
+                Theme.drawMark(segment.provider, in: NSRect(x: center.x - logoSize / 2, y: center.y - logoSize / 2,
+                                                          width: logoSize, height: logoSize), badge: segment.badge)
                 for (slot, bar) in segment.dialBars.enumerated() {
-                    let radius: CGFloat = slot == 0 ? 6.75 : 9.25
+                    let radius: CGFloat = slot == 0 ? CGFloat(options.innerRadius) : 9.25
                     func arc(from start: Double, to end: Double, color: NSColor) {
                         guard end > start else { return }
                         let path = NSBezierPath()
                         path.appendArc(withCenter: center, radius: radius,
                                        startAngle: CGFloat(90 - start * 360), endAngle: CGFloat(90 - end * 360), clockwise: true)
-                        path.lineWidth = 2.0
+                        path.lineWidth = CGFloat(options.effectiveRingWidth)
                         path.lineCapStyle = .butt
                         color.setStroke()
                         path.stroke()
@@ -235,7 +260,7 @@ enum TitleRenderer {
                     if options.showPace, let time = bar.time {
                         let angle = (90 - min(max(time, 0), 1) * 360) * Double.pi / 180
                         let guide = NSBezierPath()
-                        for (i, r) in [radius - 1.25, radius + 1.25].enumerated() {
+                        for (i, r) in [radius - CGFloat(options.effectiveRingWidth) / 2 - 0.25, radius + CGFloat(options.effectiveRingWidth) / 2 + 0.25].enumerated() {
                             let point = NSPoint(x: center.x + r * CGFloat(cos(angle)), y: center.y + r * CGFloat(sin(angle)))
                             if i == 0 { guide.move(to: point) } else { guide.line(to: point) }
                         }
