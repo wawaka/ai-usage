@@ -9,7 +9,6 @@ enum TitleRenderer {
     static let iconSize: CGFloat = 16
     static let iconBarGap: CGFloat = 4
     static let segmentGap: CGFloat = 8
-    static let barWidth: CGFloat = 48
     static let barHeight: CGFloat = 4
     static let barGap: CGFloat = 3
     static let barRadius: CGFloat = 2
@@ -93,7 +92,10 @@ enum TitleRenderer {
         let style = configuration.style
         if style == .dials { return height }
         if style == .verticalBars { return configuration.vertical.logoPosition.isBesideBars ? height : height / 2 }
-        if style == .bars { return iconSize + iconBarGap + barWidth }
+        if style == .bars {
+            let logoWidth = configuration.horizontal.logoStyle == .half ? iconSize / 2 : iconSize
+            return logoWidth + iconBarGap + CGFloat(configuration.horizontal.effectiveBarLength)
+        }
         let textWidth = numberRows(for: seg).map {
             ceil(NSAttributedString(string: $0.0, attributes: [.font: numberFont]).size().width)
         }.max() ?? 0
@@ -104,8 +106,13 @@ enum TitleRenderer {
         let style = configuration.style
         if style == .dials { return dialImage(for: segs, options: configuration.dial) }
         if style == .verticalBars { return verticalImage(for: segs, options: configuration.vertical) }
+        let barWidth = CGFloat(configuration.horizontal.effectiveBarLength)
+        let halfLogo = style == .bars && configuration.horizontal.logoStyle == .half
+        let logoWidth = halfLogo ? iconSize / 2 : iconSize
+        let showSeparators = style != .bars || configuration.horizontal.showSeparators
+        let accountGap = showSeparators ? segmentGap * 2 + 1 : segmentGap
         let widths = segs.map { width(of: $0, configuration: configuration) }
-        let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * (segmentGap * 2 + 1)
+        let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * accountGap
         let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
             let barBg = (dark ? NSColor.white : NSColor.black).withAlphaComponent(dark ? 0.25 : 0.3)
@@ -113,13 +120,21 @@ enum TitleRenderer {
             var x: CGFloat = 0
             for (i, seg) in segs.enumerated() {
                 if i > 0 {
-                    x += segmentGap
-                    divider.setFill()
-                    NSRect(x: x, y: floor(height * 0.2), width: 1, height: floor(height * 0.6)).fill()
-                    x += 1 + segmentGap
+                    if showSeparators {
+                        divider.setFill()
+                        NSRect(x: x + segmentGap, y: floor(height * 0.2), width: 1, height: floor(height * 0.6)).fill()
+                    }
+                    x += accountGap
                 }
-                Theme.drawMark(seg.provider, in: NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize), badge: seg.badge)
-                x += iconSize
+                let markRect = NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize)
+                NSGraphicsContext.saveGraphicsState()
+                if halfLogo {
+                    NSBezierPath(ovalIn: markRect).addClip()
+                    NSBezierPath(rect: NSRect(x: x, y: markRect.minY, width: logoWidth, height: iconSize)).addClip()
+                }
+                Theme.drawMark(seg.provider, in: markRect, badge: seg.badge)
+                NSGraphicsContext.restoreGraphicsState()
+                x += logoWidth
                 if style != .percent {
                     x += iconBarGap
                     let totalH = CGFloat(seg.bars.count) * barHeight + CGFloat(max(0, seg.bars.count - 1)) * barGap
@@ -131,7 +146,7 @@ enum TitleRenderer {
                                          xRadius: barRadius, yRadius: barRadius).fill()
                         }
                         capsule(barWidth, barBg)
-                        if bar.percent > 0 || bar.exhausted { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y)) }
+                        if bar.percent > 0 || bar.exhausted { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y), barWidth: barWidth) }
                         // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
                         if configuration.horizontal.showPace, let time = bar.time {
                             drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)
@@ -278,7 +293,7 @@ enum TitleRenderer {
 
     /// A bar's fill: green up to the point the window's time has reached, amber for what lies past it.
     /// `flat` draws it grey instead (untouched window, or stale data).
-    static func fillBar(_ bar: Bar, flat: Bool, at origin: NSPoint) {
+    static func fillBar(_ bar: Bar, flat: Bool, at origin: NSPoint, barWidth: CGFloat) {
         let width = max(barRadius * 2, (barWidth * (bar.exhausted ? 100 : min(bar.percent, 100)) / 100).rounded())
         let rect = NSRect(x: origin.x, y: origin.y, width: width, height: barHeight)
         let path = NSBezierPath(roundedRect: rect, xRadius: barRadius, yRadius: barRadius)

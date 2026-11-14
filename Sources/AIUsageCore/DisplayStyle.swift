@@ -14,9 +14,27 @@ public enum TitleStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
+public enum HorizontalLogoStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+    case full, half
+    public var id: String { rawValue }
+    public var label: String { self == .full ? "Full" : "Half" }
+}
+
 public struct HorizontalBarSettings: Codable, Equatable, Sendable {
     public var showPace = true
+    public var logoStyle: HorizontalLogoStyle = .full
+    public var showSeparators = true
+    public var barLength: Double = 48
     public init() {}
+    private enum CodingKeys: String, CodingKey { case showPace, logoStyle, showSeparators, barLength }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        showPace = try values.decodeIfPresent(Bool.self, forKey: .showPace) ?? true
+        logoStyle = try values.decodeIfPresent(HorizontalLogoStyle.self, forKey: .logoStyle) ?? .full
+        showSeparators = try values.decodeIfPresent(Bool.self, forKey: .showSeparators) ?? true
+        barLength = try values.decodeIfPresent(Double.self, forKey: .barLength) ?? 48
+    }
+    public var effectiveBarLength: Double { min(120, max(24, barLength.isFinite ? barLength : 48)) }
 }
 
 public enum LogoPosition: String, Codable, CaseIterable, Identifiable, Sendable {
