@@ -8,7 +8,6 @@ enum TitleRenderer {
     static let height: CGFloat = 22
     static let iconSize: CGFloat = 16
     static let iconBarGap: CGFloat = 4
-    static let segmentGap: CGFloat = 8
     static let barHeight: CGFloat = 4
     static let barGap: CGFloat = 3
     static let barRadius: CGFloat = 2
@@ -75,34 +74,36 @@ enum TitleRenderer {
 
     private static let numberFont = NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .semibold)
 
-    static func numberRows(for segment: Segment) -> [(String, NSColor)] {
+    static func numberRows(for segment: Segment, showTags: Bool = false) -> [(String, NSColor)] {
         if let balance = segment.balanceText { return [(balance, segment.textColor)] }
         // Fixed slots: a missing 5h value must not move 7d into the upper row.
-        return segment.numberBars.map { bar in
-            guard let bar else { return ("—", Theme.muted) }
+        return segment.numberBars.enumerated().map { index, bar in
+            let tag = showTags ? (index == 0 ? "5H " : "7D ") : ""
+            guard let bar else { return (tag + "—", Theme.muted) }
             let color: NSColor
             if segment.state == .unavailable || bar.untouched { color = Theme.muted }
             else if bar.exhausted { color = Theme.exhausted }
             else { color = bar.percent > bar.onPace ? Theme.warning : Theme.ok }
-            return (Format.percent(bar.percent), color)
+            return (tag + Format.percent(bar.percent), color)
         }
     }
 
     static func width(of seg: Segment, configuration: DisplayStyleSettings) -> CGFloat {
         let style = configuration.style
         if style == .dials { return height }
-        if style == .verticalBars { return configuration.vertical.logoPosition.isBesideBars ? height : height / 2 }
+        if style == .verticalBars { return CGFloat(configuration.vertical.tileWidth) }
         if style == .bars {
-            let logoWidth = horizontalLogoWidth(configuration.horizontal.logoStyle)
+            let logoWidth = widthOfLogo(configuration.horizontal.logoStyle)
             return logoWidth + (logoWidth > 0 ? iconBarGap : 0) + CGFloat(configuration.horizontal.effectiveBarLength)
         }
-        let textWidth = numberRows(for: seg).map {
+        let textWidth = numberRows(for: seg, showTags: configuration.numbers.showTags).map {
             ceil(NSAttributedString(string: $0.0, attributes: [.font: numberFont]).size().width)
         }.max() ?? 0
-        return iconSize + iconBarGap + textWidth
+        let markWidth = widthOfLogo(configuration.numbers.logoStyle)
+        return markWidth + (markWidth > 0 ? iconBarGap : 0) + textWidth
     }
 
-    private static func horizontalLogoWidth(_ style: HorizontalLogoStyle) -> CGFloat {
+    private static func widthOfLogo(_ style: MenuBarLogoStyle) -> CGFloat {
         switch style {
         case .full: return iconSize
         case .half: return iconSize / 2
@@ -110,30 +111,47 @@ enum TitleRenderer {
         }
     }
 
+    /// All styles share the same separator policy; individual tiles contain no dividers.
     static func image(for segs: [Segment], configuration: DisplayStyleSettings) -> NSImage {
+        let tiles = segs.map { contentImage(for: [$0], configuration: configuration) }
+        let compact = configuration.style == .verticalBars || configuration.style == .dials
+        let gap: CGFloat = configuration.showSeparators ? (compact ? 9 : 17) : (compact ? 0 : 8)
+        let total = tiles.reduce(CGFloat(0)) { $0 + $1.size.width } + CGFloat(max(0, tiles.count - 1)) * gap
+        let image = NSImage(size: NSSize(width: max(1, total), height: height), flipped: false) { _ in
+            var x: CGFloat = 0
+            for (index, tile) in tiles.enumerated() {
+                if index > 0 {
+                    if configuration.showSeparators {
+                        let ink = Theme.isDark(nil) ? NSColor.white : NSColor.black
+                        ink.withAlphaComponent(0.3).setFill()
+                        NSRect(x: x + (gap - 1) / 2, y: 4, width: 1, height: height - 8).fill()
+                    }
+                    x += gap
+                }
+                tile.draw(in: NSRect(x: x, y: 0, width: tile.size.width, height: height))
+                x += tile.size.width
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    private static func contentImage(for segs: [Segment], configuration: DisplayStyleSettings) -> NSImage {
         let style = configuration.style
         if style == .dials { return dialImage(for: segs, options: configuration.dial) }
         if style == .verticalBars { return verticalImage(for: segs, options: configuration.vertical) }
         let barWidth = CGFloat(configuration.horizontal.effectiveBarLength)
-        let halfLogo = style == .bars && configuration.horizontal.logoStyle == .half
-        let logoWidth = style == .bars ? horizontalLogoWidth(configuration.horizontal.logoStyle) : iconSize
-        let showSeparators = style != .bars || configuration.horizontal.showSeparators
-        let accountGap = showSeparators ? segmentGap * 2 + 1 : segmentGap
+        let markStyle = style == .bars ? configuration.horizontal.logoStyle : configuration.numbers.logoStyle
+        let halfLogo = markStyle == .half
+        let logoWidth = widthOfLogo(markStyle)
         let widths = segs.map { width(of: $0, configuration: configuration) }
-        let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * accountGap
+        let total = widths.reduce(0, +)
         let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
             let barBg = (dark ? NSColor.white : NSColor.black).withAlphaComponent(dark ? 0.25 : 0.3)
-            let divider = (dark ? NSColor.white : NSColor.black).withAlphaComponent(dark ? 0.3 : 0.25)
             var x: CGFloat = 0
             for (i, seg) in segs.enumerated() {
-                if i > 0 {
-                    if showSeparators {
-                        divider.setFill()
-                        NSRect(x: x + segmentGap, y: floor(height * 0.2), width: 1, height: floor(height * 0.6)).fill()
-                    }
-                    x += accountGap
-                }
                 let markRect = NSRect(x: x, y: floor((height - iconSize) / 2), width: iconSize, height: iconSize)
                 NSGraphicsContext.saveGraphicsState()
                 if halfLogo {
@@ -164,15 +182,15 @@ enum TitleRenderer {
                     x += barWidth
                 }
                 if style == .percent {
-                    x += iconBarGap
-                    let rows = numberRows(for: seg)
+                    if logoWidth > 0 { x += iconBarGap }
+                    let rows = numberRows(for: seg, showTags: configuration.numbers.showTags)
                     let rowHeight = height / CGFloat(max(1, rows.count))
                     for (row, value) in rows.enumerated() {
                         let text = NSAttributedString(string: value.0, attributes: [.font: numberFont, .foregroundColor: value.1])
                         let y = height - CGFloat(row + 1) * rowHeight + (rowHeight - text.size().height) / 2
                         text.draw(at: NSPoint(x: x, y: y))
                     }
-                    x += widths[i] - iconSize - iconBarGap
+                    x += widths[i] - logoWidth - (logoWidth > 0 ? iconBarGap : 0)
                 }
             }
             return true
@@ -184,7 +202,7 @@ enum TitleRenderer {
     /// One tile per account, with an optional half-logo on any edge.
     static func verticalImage(for segments: [Segment], options: VerticalBarSettings) -> NSImage {
         let position = options.logoPosition
-        let tileWidth = position.isBesideBars ? height : height / 2
+        let tileWidth = CGFloat(options.tileWidth)
         let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * tileWidth), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
             let ink = dark ? NSColor.white : NSColor.black
@@ -195,12 +213,13 @@ enum TitleRenderer {
                     let markRect: NSRect
                     let cropRect: NSRect
                     if position.isBesideBars {
-                        markRect = NSRect(x: x + 1, y: 1, width: 20, height: 20)
-                        cropRect = NSRect(x: position == .left ? x : x + 11, y: 1, width: 11, height: 20)
+                        let logoX = position == .left ? x : x + CGFloat(options.meterWidth) + 2
+                        markRect = NSRect(x: position == .left ? x + 1 : logoX - 10, y: 1, width: 20, height: 20)
+                        cropRect = NSRect(x: logoX, y: 1, width: 11, height: 20)
                     } else {
                         let top = position == .top
-                        markRect = NSRect(x: x + 1, y: top ? height - 10 : 1, width: 9, height: 9)
-                        cropRect = NSRect(x: x + 1, y: top ? height - 5.5 : 1, width: 9, height: 4.5)
+                        markRect = NSRect(x: x + (tileWidth - 9) / 2, y: top ? height - 10 : 1, width: 9, height: 9)
+                        cropRect = NSRect(x: x + (tileWidth - 9) / 2, y: top ? height - 5.5 : 1, width: 9, height: 4.5)
                     }
                     NSBezierPath(ovalIn: markRect).addClip()
                     NSBezierPath(rect: cropRect).addClip()
@@ -211,11 +230,11 @@ enum TitleRenderer {
 
                 // Each tile repeats its own half-logo and [5h, 7d] pair.
                 let fullHeight = position.isBesideBars || position == .off
-                let barsX = x + (position == .left ? 12 : 1)
+                let barsX = x + (position == .left ? 12 : position == .right ? 1 : (tileWidth - CGFloat(options.meterWidth)) / 2)
                 for (slot, bar) in segment.dialBars.reversed().enumerated() {
-                    let rect = NSRect(x: barsX + CGFloat(slot) * 5,
+                    let rect = NSRect(x: barsX + CGFloat(slot) * CGFloat(options.effectiveBarWidth + options.effectiveBarGap),
                                       y: fullHeight || position == .top ? 1 : 6.5,
-                                      width: 4, height: fullHeight ? height - 2 : height - 7.5)
+                                      width: CGFloat(options.effectiveBarWidth), height: fullHeight ? height - 2 : height - 7.5)
                     ink.withAlphaComponent(0.12).setFill()
                     NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1).fill()
                     guard let bar else { continue }

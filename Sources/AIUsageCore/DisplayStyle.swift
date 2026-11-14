@@ -14,7 +14,7 @@ public enum TitleStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     }
 }
 
-public enum HorizontalLogoStyle: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum MenuBarLogoStyle: String, Codable, CaseIterable, Identifiable, Sendable {
     case full, half, off
     public var id: String { rawValue }
     public var label: String { rawValue.capitalized }
@@ -22,16 +22,14 @@ public enum HorizontalLogoStyle: String, Codable, CaseIterable, Identifiable, Se
 
 public struct HorizontalBarSettings: Codable, Equatable, Sendable {
     public var showPace = true
-    public var logoStyle: HorizontalLogoStyle = .full
-    public var showSeparators = true
+    public var logoStyle: MenuBarLogoStyle = .full
     public var barLength: Double = 48
     public init() {}
-    private enum CodingKeys: String, CodingKey { case showPace, logoStyle, showSeparators, barLength }
+    private enum CodingKeys: String, CodingKey { case showPace, logoStyle, barLength }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         showPace = try values.decodeIfPresent(Bool.self, forKey: .showPace) ?? true
-        logoStyle = try values.decodeIfPresent(HorizontalLogoStyle.self, forKey: .logoStyle) ?? .full
-        showSeparators = try values.decodeIfPresent(Bool.self, forKey: .showSeparators) ?? true
+        logoStyle = try values.decodeIfPresent(MenuBarLogoStyle.self, forKey: .logoStyle) ?? .full
         barLength = try values.decodeIfPresent(Double.self, forKey: .barLength) ?? 48
     }
     public var effectiveBarLength: Double { min(120, max(24, barLength.isFinite ? barLength : 48)) }
@@ -46,19 +44,29 @@ public enum LogoPosition: String, Codable, CaseIterable, Identifiable, Sendable 
 
 public struct VerticalBarSettings: Codable, Equatable, Sendable {
     public var logoPosition: LogoPosition = .bottom
+    public var barWidth: Double = 4
+    public var barGap: Double = 1
     public var showPace = true
     public init() {}
-    private enum CodingKeys: String, CodingKey { case logoPosition, logosOnTop, showPace }
+    private enum CodingKeys: String, CodingKey { case logoPosition, logosOnTop, showPace, barWidth, barGap }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         logoPosition = try values.decodeIfPresent(LogoPosition.self, forKey: .logoPosition)
             ?? ((try values.decodeIfPresent(Bool.self, forKey: .logosOnTop) ?? false) ? .top : .bottom)
         showPace = try values.decodeIfPresent(Bool.self, forKey: .showPace) ?? true
+        barWidth = try values.decodeIfPresent(Double.self, forKey: .barWidth) ?? 4
+        barGap = try values.decodeIfPresent(Double.self, forKey: .barGap) ?? 1
     }
+    public var effectiveBarWidth: Double { min(8, max(2, barWidth.isFinite ? barWidth : 4)) }
+    public var effectiveBarGap: Double { min(6, max(0.5, barGap.isFinite ? barGap : 1)) }
+    public var meterWidth: Double { effectiveBarWidth * 2 + effectiveBarGap }
+    public var tileWidth: Double { logoPosition.isBesideBars ? meterWidth + 13 : max(logoPosition == .off ? 0 : 9, meterWidth) + 2 }
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(logoPosition, forKey: .logoPosition)
         try values.encode(showPace, forKey: .showPace)
+        try values.encode(barWidth, forKey: .barWidth)
+        try values.encode(barGap, forKey: .barGap)
     }
 }
 
@@ -82,14 +90,42 @@ public struct DialSettings: Codable, Equatable, Sendable {
     public var innerRadius: Double { 9.25 - effectiveRingWidth - effectiveRingGap }
 }
 
+public struct NumberSettings: Codable, Equatable, Sendable {
+    public var logoStyle: MenuBarLogoStyle = .full
+    public var showTags = false
+    public init() {}
+    private enum CodingKeys: String, CodingKey { case logoStyle, showTags }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        logoStyle = try values.decodeIfPresent(MenuBarLogoStyle.self, forKey: .logoStyle) ?? .full
+        showTags = try values.decodeIfPresent(Bool.self, forKey: .showTags) ?? false
+    }
+}
+
 /// Every style keeps its options when switching to a different style.
 public struct DisplayStyleSettings: Codable, Equatable, Sendable {
     public var style: TitleStyle = .bars
     public var horizontal = HorizontalBarSettings()
     public var vertical = VerticalBarSettings()
     public var dial = DialSettings()
+    public var numbers = NumberSettings()
+    public var showSeparators = true
 
     public init() {}
+
+    private enum CodingKeys: String, CodingKey { case style, horizontal, vertical, dial, numbers, showSeparators }
+    private enum LegacyHorizontalKeys: String, CodingKey { case showSeparators }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        style = try values.decodeIfPresent(TitleStyle.self, forKey: .style) ?? .bars
+        horizontal = try values.decodeIfPresent(HorizontalBarSettings.self, forKey: .horizontal) ?? HorizontalBarSettings()
+        vertical = try values.decodeIfPresent(VerticalBarSettings.self, forKey: .vertical) ?? VerticalBarSettings()
+        dial = try values.decodeIfPresent(DialSettings.self, forKey: .dial) ?? DialSettings()
+        numbers = try values.decodeIfPresent(NumberSettings.self, forKey: .numbers) ?? NumberSettings()
+        let legacy = try? values.nestedContainer(keyedBy: LegacyHorizontalKeys.self, forKey: .horizontal)
+        let oldSeparators = try legacy?.decodeIfPresent(Bool.self, forKey: .showSeparators)
+        showSeparators = try values.decodeIfPresent(Bool.self, forKey: .showSeparators) ?? oldSeparators ?? true
+    }
 
     /// Preserve preferences from versions that treated bars + percentages as a fifth style.
     public init(legacyStyle: String?, logosOnTop: Bool) {

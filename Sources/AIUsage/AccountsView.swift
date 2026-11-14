@@ -268,6 +268,7 @@ struct SettingsView: View {
                 Picker("Style", selection: $settings.displayStyle.style) {
                     ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
                 }
+                Toggle("Show separators between accounts", isOn: $settings.displayStyle.showSeparators)
             }
             Section("\(settings.displayStyle.style.label) settings") {
                 StyleSettingsView(configuration: $settings.displayStyle)
