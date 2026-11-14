@@ -25,7 +25,7 @@ private struct HorizontalBarsSettingsView: View {
         HStack {
             Text("Bar length")
             SmoothSteppedSlider(value: $options.barLength, range: 24...120, step: 2)
-                .frame(minWidth: 120, height: 22)
+                .frame(minWidth: 120, minHeight: 22, maxHeight: 22)
                 .accessibilityLabel("Menu bar length")
             Text("\(options.effectiveBarLength, specifier: "%.0f") pt")
                 .monospacedDigit().frame(width: 48, alignment: .trailing)

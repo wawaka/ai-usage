@@ -41,8 +41,11 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
             .combineLatest(settings.$titleMode, settings.$displayStyle, settings.$showRemaining)
             // Dragging a native slider uses the event-tracking run loop mode. Default-mode
             // delivery waits for mouse-up; common modes keep the menu bar preview live.
-            .receive(on: RunLoop.main, options: .init(runLoopMode: .common))
-            .sink { [weak self] _ in self?.render() }
+            .sink { [weak self] _ in
+                RunLoop.main.perform(inModes: [.common]) { [weak self] in
+                    MainActor.assumeIsolated { self?.render() }
+                }
+            }
             .store(in: &cancellables)
         // Bars, percent left and the refresh guide depend on the time, so redraw on every clock tick
         // (each minute, after wake, on clock changes) even when no data changed.
