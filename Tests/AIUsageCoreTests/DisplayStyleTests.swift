@@ -6,36 +6,70 @@ final class DisplayStyleTests: XCTestCase {
         for style in TitleStyle.allCases {
             let migrated = DisplayStyleSettings(legacyStyle: style.rawValue, logosOnTop: true)
             XCTAssertEqual(migrated.style, style)
-            XCTAssertFalse(migrated.horizontal.showPercent)
-            XCTAssertTrue(migrated.vertical.logosOnTop)
+            XCTAssertEqual(migrated.vertical.logoPosition, .top)
             XCTAssertTrue(migrated.horizontal.showPace)
             XCTAssertTrue(migrated.vertical.showPace)
             XCTAssertTrue(migrated.dial.showPace)
-            XCTAssertFalse(migrated.numbers.colorByUsage)
         }
         let combined = DisplayStyleSettings(legacyStyle: "barsAndPercent", logosOnTop: false)
         XCTAssertEqual(combined.style, .bars)
-        XCTAssertTrue(combined.horizontal.showPercent)
         XCTAssertEqual(DisplayStyleSettings(legacyStyle: nil, logosOnTop: false), DisplayStyleSettings())
         XCTAssertEqual(DisplayStyleSettings(legacyStyle: "unknown", logosOnTop: false), DisplayStyleSettings())
     }
 
     func testIndependentOptionsSurviveSwitchingAndPersistence() throws {
         var settings = DisplayStyleSettings()
-        settings.horizontal.showPercent = true
         settings.horizontal.showPace = false
         settings.style = .verticalBars
-        settings.vertical.logosOnTop = true
+        settings.vertical.logoPosition = .left
         settings.style = .dials
         settings.dial.showPace = false
         settings.style = .percent
-        settings.numbers.colorByUsage = true
+        settings.dial.ringWidth = 2.5
+        settings.dial.ringGap = 1
+        settings.dial.iconSize = 6
         let restored = try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings))
         XCTAssertEqual(restored, settings)
-        XCTAssertTrue(restored.horizontal.showPercent)
         XCTAssertFalse(restored.horizontal.showPace)
         XCTAssertTrue(restored.vertical.showPace, "pace options are independent between styles")
         XCTAssertFalse(restored.dial.showPace)
-        XCTAssertTrue(restored.numbers.colorByUsage)
+        XCTAssertEqual(restored.vertical.logoPosition, .left)
     }
+    func testPreviousSettingsDecodeWithoutLosingStyleOrPace() throws {
+        let old = Data(#"{"style":"percent","horizontal":{"showPercent":true,"showPace":false},"vertical":{"logosOnTop":true,"showPace":false},"dial":{"showPace":false},"numbers":{"colorByUsage":false}}"#.utf8)
+        let settings = try JSONDecoder().decode(DisplayStyleSettings.self, from: old)
+        XCTAssertEqual(settings.style, .percent)
+        XCTAssertFalse(settings.horizontal.showPace)
+        XCTAssertEqual(settings.vertical.logoPosition, .top)
+        XCTAssertFalse(settings.vertical.showPace)
+        XCTAssertFalse(settings.dial.showPace)
+        XCTAssertEqual(settings.dial.effectiveRingWidth, 2)
+        XCTAssertEqual(settings.dial.effectiveIconSize, 8)
+        XCTAssertEqual(try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings)), settings)
+    }
+
+    func testLogoPositionsRoundTrip() throws {
+        for position in LogoPosition.allCases {
+            var settings = DisplayStyleSettings()
+            settings.vertical.logoPosition = position
+            XCTAssertEqual(try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings)), settings)
+        }
+    }
+
+    func testDialGeometryKeepsRingsAndLogoSeparate() {
+        for width in [1.0, 2, 2.5, 100, -1] {
+            for gap in [0.5, 1, 100, -1] {
+                var settings = DialSettings()
+                settings.ringWidth = width
+                settings.ringGap = gap
+                settings.iconSize = 100
+                XCTAssertGreaterThanOrEqual(settings.effectiveRingWidth, 1)
+                XCTAssertLessThanOrEqual(settings.effectiveRingWidth, 2.5)
+                XCTAssertGreaterThanOrEqual(settings.innerRadius - settings.effectiveRingWidth / 2,
+                                            settings.effectiveIconSize / 2 + 0.5)
+                XCTAssertLessThanOrEqual(9.25 + settings.effectiveRingWidth / 2, 11)
+            }
+        }
+    }
+
 }
