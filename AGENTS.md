@@ -4,6 +4,11 @@ Guidance for coding agents (Codex, Claude Code, Cursor, …) working in this rep
 
 AI Usage is a native macOS menu bar app (Swift 6.2+ package; AppKit + SwiftUI; runs on macOS 14+). It shows subscription and coding-plan usage for Claude, Codex, GLM, DeepSeek, MiniMax and Kimi.
 
+## Delivery workflow
+
+- Commit and push changes directly to `main` by default. Do not create pull requests unless the user explicitly asks for one.
+- Run the checks appropriate to the change and verify CI after pushing.
+
 ## Commands
 
 ```sh
