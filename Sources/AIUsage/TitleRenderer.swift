@@ -82,6 +82,7 @@ enum TitleRenderer {
 
     static func width(of seg: Segment, style: TitleStyle) -> CGFloat {
         if style == .dials { return height }
+        if style == .verticalBars { return height / 2 }
         var w = iconSize
         if style != .percent { w += iconBarGap + barWidth }
         if style != .bars, let t = text(for: seg) {
@@ -90,8 +91,9 @@ enum TitleRenderer {
         return w
     }
 
-    static func image(for segs: [Segment], style: TitleStyle) -> NSImage {
+    static func image(for segs: [Segment], style: TitleStyle, logosOnTop: Bool = false) -> NSImage {
         if style == .dials { return dialImage(for: segs) }
+        if style == .verticalBars { return verticalImage(for: segs, logosOnTop: logosOnTop) }
         let widths = segs.map { width(of: $0, style: style) }
         let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * (segmentGap * 2 + 1)
         let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
@@ -135,6 +137,60 @@ enum TitleRenderer {
                     let size = s.size()
                     s.draw(at: NSPoint(x: x, y: (height - size.height) / 2))
                     x += ceil(size.width)
+                }
+            }
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
+    /// Half-height-wide tiles with a semicircular provider mark beneath two vertical meters.
+    static func verticalImage(for segments: [Segment], logosOnTop: Bool = false) -> NSImage {
+        let tileWidth = height / 2
+        let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * tileWidth), height: height), flipped: false) { _ in
+            let dark = Theme.isDark(nil)
+            let ink = dark ? NSColor.white : NSColor.black
+            for (index, segment) in segments.enumerated() {
+                let x = CGFloat(index) * tileWidth
+                NSGraphicsContext.saveGraphicsState()
+                // Keep artwork upright; choose the upper or lower semicircle.
+                let markY: CGFloat = logosOnTop ? height - 10 : 1
+                let cropY: CGFloat = logosOnTop ? height - 5.5 : 1
+                let markRect = NSRect(x: x + 1, y: markY, width: 9, height: 9)
+                NSBezierPath(ovalIn: markRect).addClip()
+                NSBezierPath(rect: NSRect(x: x + 1, y: cropY, width: 9, height: 4.5)).addClip()
+                NSGraphicsContext.current?.cgContext.setAlpha(0.65)
+                Theme.drawMark(segment.provider, in: markRect)
+                NSGraphicsContext.restoreGraphicsState()
+
+                // Dial slots are [7d, 5h]; vertical meters read [5h, 7d].
+                for (slot, bar) in segment.dialBars.reversed().enumerated() {
+                    let rect = NSRect(x: x + 1 + CGFloat(slot) * 5, y: logosOnTop ? 1 : 6.5, width: 4, height: height - 7.5)
+                    ink.withAlphaComponent(0.12).setFill()
+                    NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1).fill()
+                    guard let bar else { continue }
+                    let fraction = min(max(bar.exhausted ? 1 : bar.percent / 100, 0), 1)
+                    let fillRect = NSRect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height * fraction)
+                    NSGraphicsContext.saveGraphicsState()
+                    NSBezierPath(roundedRect: rect, xRadius: 1, yRadius: 1).addClip()
+                    NSGraphicsContext.current?.cgContext.setAlpha(0.8)
+                    if bar.exhausted || bar.untouched || segment.state == .unavailable {
+                        (bar.exhausted ? Theme.exhausted : Theme.muted).setFill()
+                        fillRect.fill()
+                    } else {
+                        Theme.warning.setFill()
+                        fillRect.fill()
+                        Theme.ok.setFill()
+                        NSRect(x: rect.minX, y: rect.minY, width: rect.width,
+                               height: rect.height * min(max(bar.onPace / 100, 0), fraction)).fill()
+                    }
+                    NSGraphicsContext.restoreGraphicsState()
+                    if let time = bar.time {
+                        let y = rect.minY + rect.height * min(max(time, 0), 1)
+                        ink.withAlphaComponent(0.65).setFill()
+                        NSRect(x: rect.minX, y: min(rect.maxY - 0.5, max(rect.minY, y - 0.25)), width: rect.width, height: 0.5).fill()
+                    }
                 }
             }
             return true

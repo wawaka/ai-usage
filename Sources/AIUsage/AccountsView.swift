@@ -266,6 +266,11 @@ struct SettingsView: View {
                 Picker("Style", selection: $settings.titleStyle) {
                     ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
                 }
+                if settings.titleStyle == .verticalBars {
+                    Toggle("Logos on top", isOn: $settings.verticalLogosOnTop)
+                    Text("Vertical meters fill upward: 5-hour usage on the left, 7-day usage on the right, with a semicircular provider logo above or below. A small tick marks the window’s elapsed time.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 if settings.titleStyle == .dials {
                     Text("Clockwise from twelve: inner ring is 7-day usage, outer ring is 5-hour usage. A small tick marks the window’s elapsed time. Providers without these windows show their available quota in the inner ring.")
                         .font(.caption).foregroundStyle(.secondary)

@@ -39,6 +39,7 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         Publishers.CombineLatest3(model.$statuses.map { _ in () }, model.$notInMenuBarIDs.map { _ in () },
                                   settings.$showAccountNames.map { _ in () })
             .combineLatest(settings.$titleMode, settings.$titleStyle, settings.$showRemaining)
+            .combineLatest(settings.$verticalLogosOnTop)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in Task { @MainActor in self?.render() } }
             .store(in: &cancellables)
@@ -64,17 +65,17 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
 
         if mode == .auto {
             let budget = TitleRenderer.menuBarBudget()
-            let fullWidth = TitleRenderer.image(for: all, style: style).size.width
-            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= (style == .dials ? TitleRenderer.height : 90) ? .single : .icon
+            let fullWidth = TitleRenderer.image(for: all, style: style, logosOnTop: settings.verticalLogosOnTop).size.width
+            mode = all.isEmpty ? .icon : fullWidth <= budget ? .full : budget >= (style == .verticalBars ? TitleRenderer.height / 2 : style == .dials ? TitleRenderer.height : 90) ? .single : .icon
         }
 
         let image: NSImage
         switch mode {
         case .full where !all.isEmpty:
-            image = TitleRenderer.image(for: all, style: style)
+            image = TitleRenderer.image(for: all, style: style, logosOnTop: settings.verticalLogosOnTop)
         case .single, .full:
             if let urgent = TitleRenderer.mostUrgent(statuses) {
-                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, now: now), style: style)
+                image = TitleRenderer.image(for: TitleRenderer.segments(for: [urgent], remaining: remaining, now: now), style: style, logosOnTop: settings.verticalLogosOnTop)
             } else {
                 image = TitleRenderer.iconImage(worst: nil)
             }
