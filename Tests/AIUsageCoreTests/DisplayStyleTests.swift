@@ -41,7 +41,7 @@ final class DisplayStyleTests: XCTestCase {
         XCTAssertEqual(settings.style, .percent)
         XCTAssertFalse(settings.horizontal.showPace)
         XCTAssertEqual(settings.horizontal.logoStyle, .full)
-        XCTAssertTrue(settings.horizontal.showSeparators)
+        XCTAssertTrue(settings.showSeparators)
         XCTAssertEqual(settings.horizontal.effectiveBarLength, 48)
         XCTAssertEqual(settings.vertical.logoPosition, .top)
         XCTAssertFalse(settings.vertical.showPace)
@@ -62,7 +62,7 @@ final class DisplayStyleTests: XCTestCase {
     func testHorizontalOptionsPersistIndependentlyOfOtherStyles() throws {
         var settings = DisplayStyleSettings()
         settings.horizontal.logoStyle = .off
-        settings.horizontal.showSeparators = false
+        settings.showSeparators = false
         settings.horizontal.barLength = 86
         settings.style = .dials
         let restored = try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings))
@@ -76,6 +76,47 @@ final class DisplayStyleTests: XCTestCase {
         for (saved, expected) in [(0.0, 24.0), (24, 24), (48, 48), (120, 120), (1000, 120), (.infinity, 48), (.nan, 48)] {
             options.barLength = saved
             XCTAssertEqual(options.effectiveBarLength, expected)
+        }
+    }
+
+    func testSeparatorPreferenceMigratesToGlobalSetting() throws {
+        let old = Data(#"{"style":"dials","horizontal":{"showSeparators":false}}"#.utf8)
+        var settings = try JSONDecoder().decode(DisplayStyleSettings.self, from: old)
+        XCTAssertFalse(settings.showSeparators)
+        XCTAssertEqual(settings.numbers, NumberSettings())
+        for style in TitleStyle.allCases {
+            settings.style = style
+            let restored = try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings))
+            XCTAssertFalse(restored.showSeparators)
+        }
+        let explicit = Data(#"{"horizontal":{"showSeparators":false},"showSeparators":true}"#.utf8)
+        XCTAssertTrue(try JSONDecoder().decode(DisplayStyleSettings.self, from: explicit).showSeparators)
+    }
+
+    func testNumberOptionsAndVerticalGeometryPersist() throws {
+        for logo in MenuBarLogoStyle.allCases {
+            var settings = DisplayStyleSettings()
+            settings.numbers.logoStyle = logo
+            settings.numbers.showTags = true
+            settings.vertical.barWidth = 7
+            settings.vertical.barGap = 5
+            XCTAssertEqual(try JSONDecoder().decode(DisplayStyleSettings.self, from: JSONEncoder().encode(settings)), settings)
+        }
+        for position in LogoPosition.allCases {
+            var settings = VerticalBarSettings()
+            settings.logoPosition = position
+            for width in [-1.0, 2, 4, 8, 100] {
+                for gap in [-1.0, 0.5, 1, 6, 100] {
+                    settings.barWidth = width
+                    settings.barGap = gap
+                    XCTAssertGreaterThanOrEqual(settings.effectiveBarWidth, 2)
+                    XCTAssertLessThanOrEqual(settings.effectiveBarWidth, 8)
+                    XCTAssertGreaterThanOrEqual(settings.effectiveBarGap, 0.5)
+                    XCTAssertLessThanOrEqual(settings.effectiveBarGap, 6)
+                    XCTAssertGreaterThanOrEqual(settings.tileWidth, settings.meterWidth + 2)
+                    if position.isBesideBars { XCTAssertGreaterThanOrEqual(settings.tileWidth, settings.meterWidth + 13) }
+                }
+            }
         }
     }
 
