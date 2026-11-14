@@ -64,6 +64,10 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
   Claude Code login from Keychain** and sign in to Claude in AI Usage instead.
 - **Expired logins:** AI Usage never renews another tool's login. If one expires, its card says
   so. Open that tool once and it renews itself.
+- **Reconnect Claude:** if a Claude account added in AI Usage can no longer renew its session,
+  click **Sign in again…** on its card. Sign in through the browser or paste the authorization
+  code. This replaces that account's AI Usage login without adding a duplicate or changing
+  other apps' credentials.
 
 **Adding accounts.** Use **Accounts… → Add Account**:
 - **Claude or Codex:** sign in through your browser. If the browser can't get back to the app,

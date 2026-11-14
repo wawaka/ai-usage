@@ -3,6 +3,16 @@ import AppKit
 import SwiftUI
 
 @MainActor
+final class ReauthenticationWindow: NSWindow {
+    var cancelLogin: (() -> Void)?
+
+    override func close() {
+        cancelLogin?()
+        super.close()
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settings: AppSettings!
     private var model: AppModel!
@@ -39,7 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard let login = LoginController(provider: .claude, model: model, replacing: account) else { return }
         // A separate window survives the transient popover closing when the browser opens.
-        let window = NSWindow()
+        let window = ReauthenticationWindow()
+        window.cancelLogin = { login.cancel() }
         window.contentViewController = NSHostingController(rootView:
             OAuthLoginSheet(login: login) { [weak window] in
                 login.cancel()
@@ -48,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "AI Usage — Reconnect Claude"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
+        if let view = window.contentViewController?.view { window.setContentSize(view.fittingSize) }
         window.center()
         windows[key] = window
         NSApp.activate(ignoringOtherApps: true)
