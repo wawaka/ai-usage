@@ -15,9 +15,9 @@ public enum TitleStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 }
 
 public enum HorizontalLogoStyle: String, Codable, CaseIterable, Identifiable, Sendable {
-    case full, half
+    case full, half, off
     public var id: String { rawValue }
-    public var label: String { self == .full ? "Full" : "Half" }
+    public var label: String { rawValue.capitalized }
 }
 
 public struct HorizontalBarSettings: Codable, Equatable, Sendable {

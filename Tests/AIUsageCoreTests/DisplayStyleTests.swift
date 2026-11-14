@@ -61,7 +61,7 @@ final class DisplayStyleTests: XCTestCase {
 
     func testHorizontalOptionsPersistIndependentlyOfOtherStyles() throws {
         var settings = DisplayStyleSettings()
-        settings.horizontal.logoStyle = .half
+        settings.horizontal.logoStyle = .off
         settings.horizontal.showSeparators = false
         settings.horizontal.barLength = 86
         settings.style = .dials

@@ -24,7 +24,8 @@ private struct HorizontalBarsSettingsView: View {
         Toggle("Show separators", isOn: $options.showSeparators)
         HStack {
             Text("Bar length")
-            Slider(value: $options.barLength, in: 24...120, step: 2)
+            SmoothSteppedSlider(value: $options.barLength, range: 24...120, step: 2)
+                .frame(minWidth: 120, minHeight: 22, maxHeight: 22)
                 .accessibilityLabel("Menu bar length")
             Text("\(options.effectiveBarLength, specifier: "%.0f") pt")
                 .monospacedDigit().frame(width: 48, alignment: .trailing)
