@@ -67,15 +67,12 @@ struct PanelView: View {
             MenuRow(title: "Refresh all now", shortcut: "R") { model.refresh() }
                 .keyboardShortcut("r")
             ToggleRow(title: "Show remaining", shortcut: "I", isOn: $settings.showRemaining)
-            ToggleRow(title: "Compact dials", shortcut: "D", isOn: Binding(
-                get: { settings.titleStyle == .dials },
-                set: { settings.titleStyle = $0 ? .dials : .bars }))
-            ToggleRow(title: "Vertical bars", shortcut: "V", isOn: Binding(
-                get: { settings.titleStyle == .verticalBars },
-                set: { settings.titleStyle = $0 ? .verticalBars : .bars }))
-            if settings.titleStyle == .verticalBars {
-                ToggleRow(title: "Logos on top", shortcut: "T", isOn: $settings.verticalLogosOnTop)
+            Picker("Style", selection: $settings.displayStyle.style) {
+                ForEach(TitleStyle.allCases) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.menu)
+            .font(.system(size: 13))
+            .padding(.horizontal, 8).padding(.vertical, 4)
             ToggleRow(title: "Account names", shortcut: "N", isOn: $settings.showAccountNames)
             Divider().padding(.vertical, 4).padding(.horizontal, 8)
             MenuRow(title: "Accounts…", shortcut: nil, action: actions.openAccounts)

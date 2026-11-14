@@ -80,21 +80,23 @@ enum TitleRenderer {
         return seg.balanceText
     }
 
-    static func width(of seg: Segment, style: TitleStyle) -> CGFloat {
+    static func width(of seg: Segment, configuration: DisplayStyleSettings) -> CGFloat {
+        let style = configuration.style
         if style == .dials { return height }
         if style == .verticalBars { return height / 2 }
         var w = iconSize
         if style != .percent { w += iconBarGap + barWidth }
-        if style != .bars, let t = text(for: seg) {
+        if style == .percent || configuration.horizontal.showPercent, let t = text(for: seg) {
             w += iconBarGap + ceil(NSAttributedString(string: t, attributes: [.font: percentFont]).size().width)
         }
         return w
     }
 
-    static func image(for segs: [Segment], style: TitleStyle, logosOnTop: Bool = false) -> NSImage {
-        if style == .dials { return dialImage(for: segs) }
-        if style == .verticalBars { return verticalImage(for: segs, logosOnTop: logosOnTop) }
-        let widths = segs.map { width(of: $0, style: style) }
+    static func image(for segs: [Segment], configuration: DisplayStyleSettings) -> NSImage {
+        let style = configuration.style
+        if style == .dials { return dialImage(for: segs, options: configuration.dial) }
+        if style == .verticalBars { return verticalImage(for: segs, options: configuration.vertical) }
+        let widths = segs.map { width(of: $0, configuration: configuration) }
         let total = widths.reduce(0, +) + CGFloat(max(0, segs.count - 1)) * (segmentGap * 2 + 1)
         let image = NSImage(size: NSSize(width: max(total, 1), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
@@ -124,16 +126,16 @@ enum TitleRenderer {
                         capsule(barWidth, barBg)
                         if bar.percent > 0 || bar.exhausted { fillBar(bar, flat: bar.untouched || seg.state == .unavailable, at: NSPoint(x: x, y: y)) }
                         // Usage refresh guide: usage reaching past the cursor = ahead of the window's pace.
-                        if let time = bar.time {
+                        if configuration.horizontal.showPace, let time = bar.time {
                             drawGuide(atX: x + barWidth * min(max(time, 0), 1), barY: y, dark: dark)
                         }
                         y -= barHeight + barGap
                     }
                     x += barWidth
                 }
-                if style != .bars, let t = text(for: seg) {
+                if style == .percent || configuration.horizontal.showPercent, let t = text(for: seg) {
                     x += iconBarGap
-                    let s = NSAttributedString(string: t, attributes: [.font: percentFont, .foregroundColor: style == .percent ? NSColor.labelColor : fill])
+                    let s = NSAttributedString(string: t, attributes: [.font: percentFont, .foregroundColor: style == .percent && !configuration.numbers.colorByUsage ? NSColor.labelColor : fill])
                     let size = s.size()
                     s.draw(at: NSPoint(x: x, y: (height - size.height) / 2))
                     x += ceil(size.width)
@@ -146,7 +148,8 @@ enum TitleRenderer {
     }
 
     /// Half-height-wide tiles with a semicircular provider mark beneath two vertical meters.
-    static func verticalImage(for segments: [Segment], logosOnTop: Bool = false) -> NSImage {
+    static func verticalImage(for segments: [Segment], options: VerticalBarSettings) -> NSImage {
+        let logosOnTop = options.logosOnTop
         let tileWidth = height / 2
         let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * tileWidth), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
@@ -186,7 +189,7 @@ enum TitleRenderer {
                                height: rect.height * min(max(bar.onPace / 100, 0), fraction)).fill()
                     }
                     NSGraphicsContext.restoreGraphicsState()
-                    if let time = bar.time {
+                    if options.showPace, let time = bar.time {
                         let y = rect.minY + rect.height * min(max(time, 0), 1)
                         ink.withAlphaComponent(0.65).setFill()
                         NSRect(x: rect.minX, y: min(rect.maxY - 0.5, max(rect.minY, y - 0.25)), width: rect.width, height: 0.5).fill()
@@ -200,7 +203,7 @@ enum TitleRenderer {
     }
 
     /// One square per account. Concentric rings run clockwise from twelve o'clock.
-    static func dialImage(for segments: [Segment]) -> NSImage {
+    static func dialImage(for segments: [Segment], options: DialSettings) -> NSImage {
         let image = NSImage(size: NSSize(width: max(1, CGFloat(segments.count) * height), height: height), flipped: false) { _ in
             let dark = Theme.isDark(nil)
             let track = (dark ? NSColor.white : NSColor.black).withAlphaComponent(0.22)
@@ -229,7 +232,7 @@ enum TitleRenderer {
                         arc(from: 0, to: good, color: Theme.ok)
                         arc(from: good, to: fraction, color: Theme.warning)
                     }
-                    if let time = bar.time {
+                    if options.showPace, let time = bar.time {
                         let angle = (90 - min(max(time, 0), 1) * 360) * Double.pi / 180
                         let guide = NSBezierPath()
                         for (i, r) in [radius - 1.25, radius + 1.25].enumerated() {

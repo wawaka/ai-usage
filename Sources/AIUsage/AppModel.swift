@@ -16,20 +16,6 @@ enum TitleMode: String, CaseIterable, Identifiable {
     }
 }
 
-enum TitleStyle: String, CaseIterable, Identifiable {
-    case bars, barsAndPercent, percent, dials, verticalBars
-    var id: String { rawValue }
-    var label: String {
-        switch self {
-        case .bars: return "Bars"
-        case .barsAndPercent: return "Bars + percent"
-        case .percent: return "Percent"
-        case .dials: return "Compact dials"
-        case .verticalBars: return "Vertical bars"
-        }
-    }
-}
-
 @MainActor
 final class AppSettings: ObservableObject {
     private let defaults = UserDefaults.standard
@@ -42,8 +28,13 @@ final class AppSettings: ObservableObject {
         PollPolicy(minInterval: TimeInterval(pollMinMinutes * 60), maxInterval: TimeInterval(pollMaxMinutes * 60))
     }
     @Published var titleMode: TitleMode { didSet { defaults.set(titleMode.rawValue, forKey: "titleMode") } }
-    @Published var titleStyle: TitleStyle { didSet { defaults.set(titleStyle.rawValue, forKey: "titleStyle") } }
-    @Published var verticalLogosOnTop: Bool { didSet { defaults.set(verticalLogosOnTop, forKey: "verticalLogosOnTop") } }
+    @Published var displayStyle: DisplayStyleSettings {
+        didSet {
+            if let data = try? JSONEncoder().encode(displayStyle) {
+                defaults.set(data, forKey: "displayStyleSettings")
+            }
+        }
+    }
     /// Show how much quota is left instead of how much is used.
     @Published var showRemaining: Bool { didSet { defaults.set(showRemaining, forKey: "showRemaining") } }
     /// Account names (usually emails) in the dropdown and menu bar tooltip.
@@ -64,8 +55,13 @@ final class AppSettings: ObservableObject {
         pollMinMinutes = defaults.object(forKey: "pollMinMinutes") as? Int ?? 2
         pollMaxMinutes = defaults.object(forKey: "pollMaxMinutes") as? Int ?? 30
         titleMode = TitleMode(rawValue: defaults.string(forKey: "titleMode") ?? "") ?? .auto
-        titleStyle = TitleStyle(rawValue: defaults.string(forKey: "titleStyle") ?? "") ?? .bars
-        verticalLogosOnTop = defaults.bool(forKey: "verticalLogosOnTop")
+        if let data = defaults.data(forKey: "displayStyleSettings"),
+           let saved = try? JSONDecoder().decode(DisplayStyleSettings.self, from: data) {
+            displayStyle = saved
+        } else {
+            displayStyle = DisplayStyleSettings(legacyStyle: defaults.string(forKey: "titleStyle"),
+                                               logosOnTop: defaults.bool(forKey: "verticalLogosOnTop"))
+        }
         showRemaining = defaults.bool(forKey: "showRemaining")
         showAccountNames = defaults.object(forKey: "showAccountNames") as? Bool ?? true
         readClaudeKeychain = defaults.object(forKey: "readClaudeKeychain") as? Bool ?? true
