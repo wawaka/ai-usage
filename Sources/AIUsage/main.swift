@@ -1,5 +1,16 @@
+import AIUsageCore
 import AppKit
 import SwiftUI
+
+@MainActor
+final class ReauthenticationWindow: NSWindow {
+    var cancelLogin: (() -> Void)?
+
+    override func close() {
+        cancelLogin?()
+        super.close()
+    }
+}
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -15,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let actions = PanelActions(
             openAccounts: { [weak self] in self?.showAccounts() },
             openSettings: { [weak self] in self?.showSettings() },
+            signInAgain: { [weak self] in self?.showSignInAgain($0) },
             quit: { NSApp.terminate(nil) })
         statusController = StatusItemController(model: model, settings: settings, clock: clock, actions: actions)
     }
@@ -25,6 +37,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showSettings() {
         show("settings", title: "AI Usage — Settings") { SettingsView(settings: self.settings) }
+    }
+
+    private func showSignInAgain(_ account: Account) {
+        statusController.closePopover()
+        let key = "login:\(account.id)"
+        if let window = windows[key], window.isVisible {
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            return
+        }
+        guard let login = LoginController(provider: .claude, model: model, replacing: account) else { return }
+        // A separate window survives the transient popover closing when the browser opens.
+        let window = ReauthenticationWindow()
+        window.cancelLogin = { login.cancel() }
+        window.contentViewController = NSHostingController(rootView:
+            OAuthLoginSheet(login: login) { [weak window] in
+                login.cancel()
+                window?.close()
+            }.onDisappear { login.cancel() })
+        window.title = "AI Usage — Reconnect Claude"
+        window.styleMask = [.titled, .closable]
+        window.isReleasedWhenClosed = false
+        if let view = window.contentViewController?.view { window.setContentSize(view.fittingSize) }
+        window.center()
+        windows[key] = window
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
     }
 
     private func show<V: View>(_ key: String, title: String, content: () -> V) {

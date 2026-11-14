@@ -4,6 +4,7 @@ import SwiftUI
 struct PanelActions {
     var openAccounts: () -> Void
     var openSettings: () -> Void
+    var signInAgain: (Account) -> Void
     var quit: () -> Void
 }
 
@@ -43,7 +44,8 @@ struct PanelView: View {
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
                                                   set: { model.setInMenuBar(status.account, $0) }),
                                hide: { model.setHidden(status.account, true) },
-                               reload: { model.refresh(status.account) })
+                               reload: { model.refresh(status.account) },
+                               signIn: { actions.signInAgain(status.account) })
                     .padding(.horizontal, 16).padding(.vertical, 10)
             }
         }
@@ -146,6 +148,7 @@ struct AccountSection: View {
     @Binding var inMenuBar: Bool
     let hide: () -> Void
     let reload: () -> Void
+    let signIn: () -> Void
 
     private var state: UsageState? { status.analysis?.state }
     private var tint: Color { Color(nsColor: Theme.color(for: state)) }
@@ -162,16 +165,15 @@ struct AccountSection: View {
             HStack(alignment: .top, spacing: 8) {
                 ProviderMark(provider: status.account.provider, size: 20).padding(.top, 1)
                 VStack(alignment: .leading, spacing: 0) {
-                    // Title on the left; per-account controls share its line on the right.
+                    // Title and plan get their own line so the badge stays readable.
                     HStack(alignment: .center, spacing: 6) {
                         Text(status.account.provider.displayName).font(.system(size: 14, weight: .semibold))
                             .lineLimit(1).layoutPriority(1)
-                        if let badge = state?.badge { StateBadge(text: badge, color: tint) }
+                        if state != .unavailable, let badge = state?.badge { StateBadge(text: badge, color: tint).fixedSize() }
                         if let plan = Format.planLabel(status.snapshot?.plan) {
-                            StateBadge(text: plan, color: .secondary).lineLimit(1)
+                            StateBadge(text: plan, color: .secondary).fixedSize()
                         }
-                        Spacer(minLength: 6)
-                        controls
+                        Spacer(minLength: 0)
                     }
                     if showName {
                         Text(status.account.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -180,6 +182,8 @@ struct AccountSection: View {
                         .lineLimit(1).truncationMode(.middle)
                 }
             }
+            // Keep controls out of the title's width budget: plan badges must never truncate.
+            HStack { Spacer(minLength: 0); controls }
             let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
                 WindowRow(window: w, now: now, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
@@ -190,7 +194,14 @@ struct AccountSection: View {
                     Text(balance.formatted).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(tint)
                 }
             }
-            if let message {
+            if status.requiresSignIn {
+                HStack(spacing: 8) {
+                    Text("Claude session expired.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button("Sign in again…", action: signIn).controlSize(.small)
+                }
+            } else if let message {
                 Text(message)
                     .font(.system(size: 11))
                     .foregroundStyle(status.error != nil ? Color(nsColor: Theme.alert) : Color.secondary)
@@ -256,7 +267,7 @@ struct StateBadge: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .padding(.horizontal, 6).padding(.vertical, 1)
             .background(Capsule().fill(color.opacity(0.18)))
             .foregroundStyle(color)

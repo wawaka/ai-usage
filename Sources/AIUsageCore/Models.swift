@@ -225,6 +225,8 @@ public struct AccountStatus: Sendable, Identifiable {
     public var lastAttempt: Date
     /// When the next automatic update of this account is due.
     public var nextRefresh: Date?
+    /// Managed Claude login can no longer be renewed; show the browser sign-in action.
+    public var requiresSignIn = false
 
     public var id: String { account.id }
 

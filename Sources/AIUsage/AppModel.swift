@@ -232,4 +232,12 @@ final class AppModel: ObservableObject {
         await reloadAccounts()
         refresh()
     }
+
+    func reauthenticateClaude(_ account: Account, label: String, token: OAuthToken) async throws {
+        try await service.reauthenticateClaude(account, label: label, token: token)
+        statuses.removeAll { $0.id == account.id }
+        await rescanAndFetch { service in
+            await service.visibleAccounts().filter { $0.id == account.id }
+        }
+    }
 }
