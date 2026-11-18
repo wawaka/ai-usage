@@ -153,10 +153,10 @@ public actor UsageService {
     /// at least as long as the provider asked; refreshes are refused until then.
     ///
     /// Around a window reset: the next poll is pulled forward to `PollPolicy.resetGrace` after the
-    /// earliest upcoming reset. If a successful poll (`fetched`) still reports a reset that has
-    /// passed, the provider hasn't rolled the window over yet (its reset may be rounded to the
-    /// minute, or its clock behind this Mac's), so it's asked once more `PollPolicy.resetRecheck`
-    /// later; after that the normal schedule applies.
+    /// earliest upcoming reset. If after a reset a successful poll (`fetched`) doesn't show that
+    /// window counting down again (it reports no future reset: not started yet because nothing was
+    /// used, or still the old window), it's asked once more `PollPolicy.resetRecheck` later to catch
+    /// the new countdown starting; after that the normal schedule applies.
     private func reschedule(_ id: String, changed: Bool, rateLimited: Bool = false, retryAfter: TimeInterval? = nil,
                             snapshot: UsageSnapshot?, fetched: Bool = false, now: Date) {
         var s = schedule[id] ?? PollState(interval: policy.minInterval, nextDue: now)
@@ -172,10 +172,18 @@ public actor UsageService {
             if let retryAfter { wait = max(wait, retryAfter) }
             s.blockedUntil = now.addingTimeInterval(retryAfter ?? PollPolicy.rateLimitCooldown)
         } else {
-            if fetched, let pending = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 <= now }).max(),
-               pending != s.recheckedReset {
-                s.recheckedReset = pending
-                wait = min(wait, PollPolicy.resetRecheck)
+            if fetched, let snapshot {
+                // Passed resets, from the previous snapshot or still in this one, whose window
+                // isn't counting down to a new one yet.
+                let passed = ((lastSnapshots[id]?.windows ?? []) + snapshot.windows).filter { w in
+                    guard let reset = w.resetsAt, reset <= now else { return false }
+                    let current = snapshot.windows.first { $0.label == w.label }
+                    return !(current?.resetsAt.map { $0 > now } ?? false)
+                }
+                if let reset = passed.compactMap(\.resetsAt).max(), reset != s.recheckedReset {
+                    s.recheckedReset = reset
+                    wait = min(wait, PollPolicy.resetRecheck)
+                }
             }
             if let next = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 > now }).min() {
                 // Catch a window reset right after it happens instead of up to `maxInterval` later.
@@ -345,7 +353,7 @@ public struct PollPolicy: Sendable, Equatable {
     /// The poll after a window reset comes this long after the reported reset time, so the
     /// provider's backend has had a moment to roll the window over instead of returning the old one.
     public static let resetGrace: TimeInterval = 10
-    /// When that poll still shows the old window, it's repeated once after this long.
+    /// When that poll doesn't show the window counting down again, it's repeated once after this long.
     public static let resetRecheck: TimeInterval = 60
 
     public init(minInterval: TimeInterval = 120, maxInterval: TimeInterval = 1800) {

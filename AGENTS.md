@@ -58,7 +58,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
 - **Managed accounts** come from an OAuth login (`OAuth.swift` + `LoginController.swift`, a loopback NWListener with a paste fallback) or an API key. Their secrets are stored through `SecretStore`, which is `KeychainSecretStore` on macOS.
 
 **Polling** is adaptive per account and lives in `UsageService`, not the app.
-- Each account has a `PollState`. The interval doubles while `usageDiffers` is false and resets to `PollPolicy.minInterval` on a change. A poll is pulled forward to `PollPolicy.resetGrace` (10 s) after a window's reset (`AppModel` arms a one-shot timer for it); if that poll still shows the passed reset, it's repeated once `resetRecheck` (60 s) later, which also covers resets reported only to the minute.
+- Each account has a `PollState`. The interval doubles while `usageDiffers` is false and resets to `PollPolicy.minInterval` on a change. A poll is pulled forward to `PollPolicy.resetGrace` (10 s) after a window's reset (`AppModel` arms a one-shot timer for it); if that poll doesn't show the window counting down again (not started for lack of use, or still the old window), it's repeated once `resetRecheck` (60 s) later to catch the new countdown starting.
 - `UsageError.rateLimited` comes from HTTP 429 with `Retry-After`, or from provider codes (GLM 1302/1303, MiniMax 1002). It sets `blockedUntil`, which refuses even manual refreshes.
 - `AppModel` only ticks every 30 s, asking `dueAccounts()`. Opening the popover does not poll.
 - The schedule is persisted in `schedule.json`, so launch and wake honour intervals and rate limits. Without an entry, an account is due `minInterval` after its saved snapshot's `observedAt`.

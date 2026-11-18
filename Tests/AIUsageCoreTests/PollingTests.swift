@@ -81,7 +81,7 @@ final class PollingTests: XCTestCase {
         }
     }
 
-    func testNoRecheckOnceTheProviderHasRolledTheWindowOver() async throws {
+    func testRecheckAfterResetUntilTheNewWindowCountsDown() async throws {
         let t0 = Date(timeIntervalSince1970: 1_800_000_000)
         let reset = t0.addingTimeInterval(300)
         func body(_ used: Int, _ resetsAt: Date?) throws -> HTTPResponse {
@@ -90,19 +90,25 @@ final class PollingTests: XCTestCase {
                 "five_hour": ["utilization": used, "resets_at": r],
                 "seven_day": ["utilization": 1, "resets_at": NSNull()]]))
         }
-        let http = ScriptedHTTP(try body(100, reset))
-        let (service, account) = try await makeService(http)
-        await service.setPolicy(PollPolicy(minInterval: 120, maxInterval: 400))
-        for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
-        // Minute-precision resets ("…:38:00Z") are covered the same way: the poll lands 10 s into
-        // the reported minute and, if the window hasn't rolled yet, the recheck one minute later.
-        http.next = try body(0, nil)
-        _ = await service.refresh(account, now: reset.addingTimeInterval(10))
-        let next = await service.nextRefresh(account.id)
-        XCTAssertEqual(next, reset.addingTimeInterval(130), "rolled over: minimum interval, no recheck")
-        _ = await service.refresh(account, now: reset.addingTimeInterval(130))
-        let after = await service.nextRefresh(account.id)
-        XCTAssertEqual(after, reset.addingTimeInterval(370), "unchanged: normal backoff")
+        for countdownStarted in [false, true] {
+            let http = ScriptedHTTP(try body(100, reset))
+            let (service, account) = try await makeService(http)
+            await service.setPolicy(PollPolicy(minInterval: 120, maxInterval: 400))
+            for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
+            // After the reset the window either hasn't started (nothing used yet: no reset) or is
+            // already counting down to the next one.
+            http.next = try body(countdownStarted ? 1 : 0, countdownStarted ? reset.addingTimeInterval(5 * 3600) : nil)
+            _ = await service.refresh(account, now: reset.addingTimeInterval(10))
+            let next = await service.nextRefresh(account.id)
+            if countdownStarted {
+                XCTAssertEqual(next, reset.addingTimeInterval(130), "counting down: minimum interval, no recheck")
+                continue
+            }
+            XCTAssertEqual(next, reset.addingTimeInterval(70), "not started: look again a minute later")
+            _ = await service.refresh(account, now: reset.addingTimeInterval(70))
+            let after = await service.nextRefresh(account.id)
+            XCTAssertEqual(after, reset.addingTimeInterval(310), "only one recheck, then normal backoff")
+        }
     }
 
     func testFailedPollAfterResetIsNotRechecked() async throws {
