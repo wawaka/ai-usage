@@ -41,6 +41,11 @@ case "status":
                 }
                 if let b = snap.balance { o["balance"] = b.formatted }
                 if let p = snap.plan { o["plan"] = p }
+                if let c = snap.resetCredits {
+                    var d: [String: Any] = ["available": c.available]
+                    if let e = c.nextExpiresAt { d["next_expires_at"] = ISO8601DateFormatter().string(from: e) }
+                    o["reset_credits"] = d
+                }
             }
             return o
         }
@@ -56,6 +61,8 @@ case "status":
                 for w in snap.windows + snap.extraWindows {
                     print("  \(pad(w.label, 9)) \(bar(w.usedPercent)) \(pad(Format.percent(w.usedPercent), 5)) \(w.isUntouched ? "not started" : "\(pad(Format.countdown(w.resetsAt), 7)) \(Format.reset(w.resetsAt))")")
                 }
+                let resets = Format.resetCredits(snap.resetCredits)
+                if !resets.isEmpty { print("  \(pad("resets", 9)) \(resets)") }
             }
             if let e = s.error { print("  error: \(e)") } else if let m = s.analysis?.message { print("  \(m)") }
             print("  via \(s.account.sourceDescription)")

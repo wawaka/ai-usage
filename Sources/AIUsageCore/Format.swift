@@ -54,4 +54,16 @@ public enum Format {
         let words = raw.replacingOccurrences(of: "claude_", with: "").split(whereSeparator: { $0 == "_" || $0 == " " })
         return words.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }.joined(separator: " ")
     }
+
+    /// "2 left · next expires 12/5" (time of day when it's today), or "" when there are none.
+    public static func resetCredits(_ credits: ResetCredits?, now: Date = Date(), calendar: Calendar = .current) -> String {
+        guard let credits, credits.available > 0 else { return "" }
+        let count = "\(credits.available) left"
+        guard let expiry = credits.nextExpiresAt, expiry > now else { return count }
+        let f = DateFormatter()
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.dateFormat = calendar.isDate(expiry, inSameDayAs: now) ? "HH:mm" : "M/d"
+        return "\(count) · \(credits.available == 1 ? "expires" : "next expires") \(f.string(from: expiry))"
+    }
 }

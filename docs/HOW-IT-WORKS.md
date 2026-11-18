@@ -56,7 +56,9 @@ Each account has its own schedule:
 - **While usage changes:** it's checked every *minimum* interval (default 2 min).
 - **While it doesn't:** each check that returns the same numbers, or fails, doubles the wait, up to
   the *maximum* (default 30 min). A change resets it to the minimum.
-- **After a reset:** it's checked about 30 s after one of its windows resets.
+- **After a reset:** it's checked 10 s after one of its windows resets. If that check doesn't show
+  the window counting down again (nothing used yet, or the provider still shows the old window),
+  it's checked once more a minute later.
 - **Relaunch and wake:** the schedule is saved, so a relaunch or wake shows the saved numbers and
   fetches only accounts whose interval has passed. Opening the dropdown never polls.
 
@@ -71,8 +73,15 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
 - **Title width:** *Auto* measures the space to the right of the notch, or half the menu bar on
   displays without one. It shows all accounts if they fit, then only the most urgent account, then
   a single gauge icon.
-- **Untouched windows:** a window with 0% used hasn't started; providers start its clock on first use.
-  It's drawn as a plain grey bar, with no countdown and no refresh guide.
+- **Untouched windows:** a window with 0% used and a full window left before its reset (or no reset
+  at all) hasn't started; providers start its clock on first use. It's drawn as a plain grey bar,
+  with no countdown and no refresh guide. At 0% with less than a full window left, the clock is
+  running (usage rounded down), so the countdown and guide are shown.
+- **Saved resets:** Claude and Codex accounts with usage-limit resets to redeem show a *Resets* line
+  in the dropdown: how many are left and when the next one expires. Codex lists expiry dates only
+  on a separate, heavily rate-limited endpoint, so it's asked only when the count changes, the known
+  date passes, or 6 hours have gone by. Claude lists them in its usage response only for accounts
+  its server reports as eligible.
 - **Usage refresh guide:** the cursor sits at the fraction of the window's time that has elapsed,
   or remained when *Show remaining* is on.
 

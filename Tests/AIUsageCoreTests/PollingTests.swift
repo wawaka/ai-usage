@@ -156,6 +156,67 @@ final class PollingTests: XCTestCase {
 }
 
 extension PollingTests {
+    func testClaudeAsksForResetsAndFallsBackWhenTheOptInIsRejected() async throws {
+        let usage = #"{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":1,"resets_at":null},"cedar_ember":{"eligible":true,"grants":[{"resets_left":1,"ends_at":"2099-01-01T00:00:00Z"}]}}"#
+        var rejectOptIn = false
+        let http = MockHTTP { req in
+            if req.url?.path.hasSuffix("/profile") == true { return (200, "{}") }
+            if req.url?.query?.contains("cedar_ember=1") == true { return rejectOptIn ? (400, "bad param") : (200, usage) }
+            return (200, #"{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":1,"resets_at":null}}"#)
+        }
+        let (service, account) = try await makeService(http)
+        let first = await service.refresh(account)
+        XCTAssertEqual(first.snapshot?.resetCredits?.available, 1)
+        rejectOptIn = true
+        let second = await service.refresh(account)
+        XCTAssertNil(second.error)
+        XCTAssertEqual(second.snapshot?.fiveHour?.usedPercent, 10)
+        XCTAssertNil(second.snapshot?.resetCredits)
+    }
+
+    func testCodexResetExpiryIsAskedRarely() async throws {
+        var count = 2
+        var listStatus = 200
+        let http = MockHTTP { req in
+            if req.url?.path.hasSuffix("/rate-limit-reset-credits") == true {
+                return (listStatus, #"{"credits":[{"id":"c","reset_type":"codex_rate_limits","status":"available","granted_at":"2026-06-17T00:00:00Z","expires_at":"2099-07-17T00:00:00Z"}],"available_count":1}"#)
+            }
+            return (200, #"{"rate_limit":{"primary_window":{"used_percent":3,"limit_window_seconds":604800}},"rate_limit_reset_credits":{"available_count":\#(count)}}"#)
+        }
+        let service = UsageService(secrets: MemorySecrets(), client: http, home: dir, directory: dir)
+        let account = try await service.addManaged(provider: .codex, label: "c",
+                                                   credential: .oauth(OAuthToken(accessToken: "t", refreshToken: "r", expiresAt: .distantFuture, accountId: "acc")))
+        func listCalls() -> Int { http.requests.filter { $0.url?.path.hasSuffix("/rate-limit-reset-credits") == true }.count }
+        let expiry = ISO8601DateFormatter().date(from: "2099-07-17T00:00:00Z")
+        let t0 = Date()
+
+        let first = await service.refresh(account, now: t0)
+        XCTAssertEqual(first.snapshot?.resetCredits?.available, 2)
+        XCTAssertEqual(first.snapshot?.resetCredits?.nextExpiresAt, expiry)
+        XCTAssertEqual(listCalls(), 1)
+        // Same count: the date is kept without asking again, until the recheck interval passes.
+        let kept = await service.refresh(account, now: t0.addingTimeInterval(3600))
+        XCTAssertEqual(kept.snapshot?.resetCredits?.nextExpiresAt, expiry)
+        XCTAssertEqual(listCalls(), 1)
+        // A failing (rate-limited) list keeps the usage and the known date, and doesn't fail the poll.
+        listStatus = 429
+        let limited = await service.refresh(account, now: t0.addingTimeInterval(7 * 3600))
+        XCTAssertNil(limited.error)
+        XCTAssertEqual(limited.snapshot?.resetCredits?.nextExpiresAt, expiry)
+        XCTAssertEqual(listCalls(), 2)
+        _ = await service.refresh(account, now: t0.addingTimeInterval(8 * 3600))
+        XCTAssertEqual(listCalls(), 2, "a failure also waits for the recheck interval")
+        // A changed count asks again; no resets asks nothing.
+        listStatus = 200
+        count = 1
+        _ = await service.refresh(account, now: t0.addingTimeInterval(9 * 3600))
+        XCTAssertEqual(listCalls(), 3)
+        count = 0
+        let none = await service.refresh(account, now: t0.addingTimeInterval(10 * 3600))
+        XCTAssertEqual(listCalls(), 3)
+        XCTAssertEqual(Format.resetCredits(none.snapshot?.resetCredits), "")
+    }
+
     func testScheduleSurvivesRelaunch() async throws {
         let http = ScriptedHTTP(Self.usage(10))
         let (service, account) = try await makeService(http)

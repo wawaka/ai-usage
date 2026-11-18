@@ -170,6 +170,61 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(roundTrip, snapshot)
     }
 
+    func testClaudeResetCredits() throws {
+        let now = ISO8601DateFormatter().date(from: "2026-10-01T00:00:00Z")!
+        func parse(_ cedar: String) throws -> ResetCredits? {
+            try Claude.parse(obj(#"{"five_hour":{"utilization":5,"resets_at":null},"cedar_ember":\#(cedar)}"#), now: now).resetCredits
+        }
+        // Shape reported from the live endpoint with `cedar_ember=1`.
+        let credits = try parse("""
+        {"eligible":true,"next_grant_id":"g3","grants":[
+          {"id":"g1","label":"x","resets_total":2,"resets_left":2,"starts_at":"2026-09-22T16:00:00+00:00",
+           "ends_at":"2026-10-22T16:00:00+00:00","clears":["five_hour","seven_day"],"paused":false,"usable_now":false},
+          {"id":"g2","resets_total":1,"resets_left":1,"starts_at":"2026-09-25T16:00:00.123456+00:00",
+           "ends_at":"2026-10-12T16:00:00+00:00","clears":["five_hour"],"paused":false},
+          {"id":"used","resets_total":1,"resets_left":0,"ends_at":"2026-10-02T00:00:00Z"},
+          {"id":"paused","resets_total":1,"resets_left":1,"paused":true,"ends_at":"2026-10-02T00:00:00Z"},
+          {"id":"ended","resets_total":1,"resets_left":1,"ends_at":"2026-09-30T00:00:00Z"},
+          {"id":"future","resets_total":1,"resets_left":1,"starts_at":"2026-10-05T00:00:00Z"}]}
+        """)
+        XCTAssertEqual(credits?.available, 3)
+        XCTAssertEqual(credits?.nextExpiresAt, ISO8601DateFormatter().date(from: "2026-10-12T16:00:00Z"))
+        XCTAssertNil(try parse("null"))
+        XCTAssertNil(try parse(#"{"eligible":false,"ineligible_reason":"surface","grants":[]}"#))
+        XCTAssertNil(try Claude.parse(obj(#"{"five_hour":{"utilization":5,"resets_at":null}}"#)).resetCredits)
+    }
+
+    func testCodexResetCredits() throws {
+        let s = try Codex.parse(obj("""
+        {"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":3,"limit_window_seconds":604800}},
+         "rate_limit_reset_credits":{"available_count":2}}
+        """))
+        XCTAssertEqual(s.resetCredits, ResetCredits(available: 2))
+        XCTAssertNil(try Codex.parse(obj(#"{"rate_limit":{"primary_window":{"used_percent":3,"limit_window_seconds":604800}}}"#)).resetCredits)
+        // Shape from the Codex CLI's backend client tests.
+        let expiry = Codex.nextResetCreditExpiry(obj("""
+        {"credits":[
+          {"id":"c1","reset_type":"codex_rate_limits","status":"available","granted_at":"2026-06-17T00:00:00Z","expires_at":"2026-07-17T00:00:00Z","title":"Full reset (Weekly + 5 hr)"},
+          {"id":"c2","reset_type":"codex_rate_limits","status":"available","granted_at":"2026-06-18T00:00:00Z","expires_at":null},
+          {"id":"c3","reset_type":"codex_rate_limits","status":"redeemed","granted_at":"2026-06-01T00:00:00Z","expires_at":"2026-07-01T00:00:00Z"}],
+         "available_count":2,"total_earned_count":4}
+        """))
+        XCTAssertEqual(expiry, ISO8601DateFormatter().date(from: "2026-07-17T00:00:00Z"))
+    }
+
+    func testFormatResetCredits() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
+        let now = ISO8601DateFormatter().date(from: "2026-10-30T10:00:00Z")!
+        XCTAssertEqual(Format.resetCredits(nil, now: now, calendar: cal), "")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 0), now: now, calendar: cal), "")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 2), now: now, calendar: cal), "2 left")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 3, nextExpiresAt: now.addingTimeInterval(86400 * 6)), now: now, calendar: cal),
+                       "3 left · next expires 11/5")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(3600)), now: now, calendar: cal),
+                       "1 left · expires 11:00")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(-1)), now: now, calendar: cal), "1 left")
+    }
+
     func testPaceSplit() {
         let now = Date()
         func window(_ used: Double) -> UsageWindow {

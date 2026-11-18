@@ -185,6 +185,15 @@ struct AccountSection: View {
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
                 WindowRow(window: w, now: now, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
             }
+            let resets = Format.resetCredits(status.snapshot?.resetCredits, now: now)
+            if !resets.isEmpty {
+                HStack(spacing: 6) {
+                    Text("Resets").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+                    Text(resets).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+                        .lineLimit(1).truncationMode(.tail)
+                }
+                .help("Saved usage-limit resets you can redeem in \(status.account.provider.displayName)")
+            }
             if let balance = status.snapshot?.balance {
                 HStack(spacing: 6) {
                     Text("Balance").font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)

@@ -129,18 +129,37 @@ public struct Balance: Codable, Equatable, Sendable {
     }
 }
 
+/// Saved usage-limit resets the user can redeem (Claude's and Codex's "reset credits").
+public struct ResetCredits: Codable, Equatable, Sendable {
+    /// Resets that can be redeemed now or later.
+    public var available: Int
+    /// When the soonest-expiring available reset expires, if the provider says.
+    public var nextExpiresAt: Date?
+    /// Codex: when the per-reset list (the only source of expiry dates) was last asked for.
+    public var expiryCheckedAt: Date?
+
+    public init(available: Int, nextExpiresAt: Date? = nil, expiryCheckedAt: Date? = nil) {
+        self.available = available
+        self.nextExpiresAt = nextExpiresAt
+        self.expiryCheckedAt = expiryCheckedAt
+    }
+}
+
 public struct UsageSnapshot: Codable, Equatable, Sendable {
     public var windows: [UsageWindow]
     public var extraWindows: [UsageWindow]
     public var balance: Balance?
     public var plan: String?
+    public var resetCredits: ResetCredits?
     public var observedAt: Date
 
-    public init(windows: [UsageWindow], extraWindows: [UsageWindow] = [], balance: Balance? = nil, plan: String? = nil, observedAt: Date = Date()) {
+    public init(windows: [UsageWindow], extraWindows: [UsageWindow] = [], balance: Balance? = nil, plan: String? = nil,
+                resetCredits: ResetCredits? = nil, observedAt: Date = Date()) {
         self.windows = windows.map { $0.observed(at: observedAt) }
         self.extraWindows = extraWindows.map { $0.observed(at: observedAt) }
         self.balance = balance
         self.plan = plan
+        self.resetCredits = resetCredits
         self.observedAt = observedAt
     }
 
@@ -152,6 +171,7 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
                   extraWindows: try c.decodeIfPresent([UsageWindow].self, forKey: .extraWindows) ?? [],
                   balance: try c.decodeIfPresent(Balance.self, forKey: .balance),
                   plan: try c.decodeIfPresent(String.self, forKey: .plan),
+                  resetCredits: try c.decodeIfPresent(ResetCredits.self, forKey: .resetCredits),
                   observedAt: try c.decode(Date.self, forKey: .observedAt))
     }
 

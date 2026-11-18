@@ -235,7 +235,7 @@ public actor UsageService {
             return failed(account, stale, Self.rateLimitMessage(until: schedule[account.id]?.nextDue ?? until))
         }
         do {
-            let snapshot = try await fetch(account)
+            let snapshot = try await fetch(account, now: now)
             reschedule(account.id, changed: snapshot.usageDiffers(from: stale), snapshot: snapshot, fetched: true, now: now)
             lastSnapshots[account.id] = snapshot
             snapshotStore.save(lastSnapshots)
@@ -299,9 +299,13 @@ public actor UsageService {
 
     /// Usage plus, when the provider's usage endpoint doesn't say, the plan: kept from the previous
     /// snapshot, else asked once from Claude's profile endpoint.
-    private func fetchUsage(_ account: Account, _ credential: Credential) async throws -> UsageSnapshot {
+    private func fetchUsage(_ account: Account, _ credential: Credential, now: Date) async throws -> UsageSnapshot {
         var snapshot = try await UsageFetcher.fetch(account.provider, credential: credential, client: client)
         if snapshot.plan == nil { snapshot.plan = lastSnapshots[account.id]?.plan }
+        if account.provider == .codex, case .oauth(let token) = credential {
+            snapshot.resetCredits = await codexResetCredits(snapshot.resetCredits, previous: lastSnapshots[account.id]?.resetCredits,
+                                                            token: token, now: now)
+        }
         if snapshot.plan == nil, account.provider == .claude, case .oauth(let token) = credential,
            planLookups.insert(account.id).inserted {
             snapshot.plan = await Claude.profile(token: token, client: client).plan
@@ -309,7 +313,32 @@ public actor UsageService {
         return snapshot
     }
 
-    private func fetch(_ account: Account) async throws -> UsageSnapshot {
+    /// How often Codex's reset list is asked for while the count stays the same (it's rate limited hard).
+    static let resetExpiryRecheck: TimeInterval = 6 * 3600
+
+    /// Codex's usage only counts saved resets; their expiry dates need a second, rate-limited
+    /// request. It's sent only when there are resets and the count changed, the known expiry passed,
+    /// or `resetExpiryRecheck` went by; otherwise the previous date is kept. A failure keeps
+    /// the count (and the previous date when the count is unchanged) and waits as long.
+    private func codexResetCredits(_ current: ResetCredits?, previous: ResetCredits?, token: OAuthToken, now: Date) async -> ResetCredits? {
+        guard var credits = current, credits.available > 0 else { return current }
+        let same = previous?.available == credits.available
+        if same, let previous, let checked = previous.expiryCheckedAt, now.timeIntervalSince(checked) < Self.resetExpiryRecheck,
+           (previous.nextExpiresAt.map { $0 > now } ?? true) {
+            credits.nextExpiresAt = previous.nextExpiresAt
+            credits.expiryCheckedAt = checked
+            return credits
+        }
+        credits.expiryCheckedAt = now
+        do {
+            credits.nextExpiresAt = try await Codex.nextResetCreditExpiry(token: token, client: client)
+        } catch {
+            credits.nextExpiresAt = same ? previous?.nextExpiresAt.flatMap { $0 > now ? $0 : nil } : nil
+        }
+        return credits
+    }
+
+    private func fetch(_ account: Account, now: Date) async throws -> UsageSnapshot {
         recheckExpiredKeychainToken(account)
         guard let (credential, tool) = credential(for: account) else {
             throw UsageError.missingCredential("No credentials for \(account.label)")
@@ -321,24 +350,24 @@ public actor UsageService {
                 throw UsageError.expiredLocalToken(tool ?? "the owning tool")
             }
             do {
-                return try await fetchUsage(account, credential)
+                return try await fetchUsage(account, credential, now: now)
             } catch UsageError.unauthorized {
                 throw UsageError.expiredLocalToken(tool ?? "the owning tool")
             }
         }
         guard case .oauth(var token) = credential, let oauth = OAuthProviders.forProvider(account.provider) else {
-            return try await fetchUsage(account, credential)
+            return try await fetchUsage(account, credential, now: now)
         }
         if token.isExpired() {
             token = try await oauth.refresh(token, client: client)
             try secrets.save(.oauth(token), for: account.id)
         }
         do {
-            return try await fetchUsage(account, .oauth(token))
+            return try await fetchUsage(account, .oauth(token), now: now)
         } catch UsageError.unauthorized {
             token = try await oauth.refresh(token, client: client)
             try secrets.save(.oauth(token), for: account.id)
-            return try await fetchUsage(account, .oauth(token))
+            return try await fetchUsage(account, .oauth(token), now: now)
         }
     }
 }

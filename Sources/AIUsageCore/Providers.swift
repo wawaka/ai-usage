@@ -28,11 +28,36 @@ public enum Claude {
         ["Authorization": "Bearer \(token.accessToken)", "anthropic-beta": "oauth-2025-04-20"]
     }
 
+    /// The usage endpoint with saved resets (`cedar_ember`) opted in.
+    static let usageWithResetsURL = URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1")!
+
     public static func fetch(token: OAuthToken, client: HTTPClient) async throws -> UsageSnapshot {
-        let obj = try await HTTP.json(client, HTTP.request(usageURL, headers: headers(token)))
+        let obj: [String: Any]
+        do {
+            obj = try await HTTP.json(client, HTTP.request(usageWithResetsURL, headers: headers(token)))
+        } catch UsageError.http(400, _) {
+            // The opt-in is undocumented; never let it cost the usage numbers.
+            obj = try await HTTP.json(client, HTTP.request(usageURL, headers: headers(token)))
+        }
         var snapshot = try parse(obj)
         snapshot.plan = token.plan
         return snapshot
+    }
+
+    /// Saved resets from `cedar_ember`: the resets left in grants that are live now (not paused,
+    /// started, not ended), and the soonest end among them. Nil when the block is absent or the
+    /// account isn't eligible (the server then lists no grants).
+    static func resetCredits(_ obj: [String: Any], now: Date) -> ResetCredits? {
+        guard let block = dict(obj["cedar_ember"]), block["eligible"] as? Bool != false,
+              let grants = block["grants"] as? [[String: Any]] else { return nil }
+        let live = grants.filter { g in
+            guard (g["paused"] as? Bool) != true, (number(g["resets_left"]) ?? 0) > 0 else { return false }
+            if let start = parseISODate(g["starts_at"]), start > now { return false }
+            if let end = parseISODate(g["ends_at"]), end <= now { return false }
+            return true
+        }
+        let count = live.reduce(0) { $0 + Int(number($1["resets_left"]) ?? 0) }
+        return ResetCredits(available: count, nextExpiresAt: live.compactMap { parseISODate($0["ends_at"]) }.min())
     }
 
     /// Plan id for `Format.planLabel`: "max_5x" / "max_20x" from the rate-limit tier, else the subscription
@@ -56,7 +81,7 @@ public enum Claude {
             window("seven_day_opus", .other, "7d Opus", 10080),
             window("seven_day_sonnet", .other, "7d Sonnet", 10080),
         ].compactMap { $0 }
-        return UsageSnapshot(windows: windows, extraWindows: extras, observedAt: now)
+        return UsageSnapshot(windows: windows, extraWindows: extras, resetCredits: resetCredits(obj, now: now), observedAt: now)
     }
 
     /// Email and plan for a freshly logged-in account.
@@ -74,13 +99,16 @@ public enum Claude {
 public enum Codex {
     public static let usageURL = URL(string: "https://chatgpt.com/backend-api/wham/usage")!
 
-    public static func fetch(token: OAuthToken, client: HTTPClient) async throws -> UsageSnapshot {
+    static func headers(_ token: OAuthToken) -> [String: String] {
         var headers = ["Authorization": "Bearer \(token.accessToken)"]
         if let id = token.accountId ?? accountId(fromJWT: token.idToken ?? token.accessToken) {
             headers["ChatGPT-Account-Id"] = id
         }
-        let obj = try await HTTP.json(client, HTTP.request(usageURL, headers: headers))
-        return try parse(obj)
+        return headers
+    }
+
+    public static func fetch(token: OAuthToken, client: HTTPClient) async throws -> UsageSnapshot {
+        try parse(try await HTTP.json(client, HTTP.request(usageURL, headers: headers(token))))
     }
 
     public static func parse(_ obj: [String: Any], now: Date = Date()) throws -> UsageSnapshot {
@@ -103,7 +131,23 @@ public enum Codex {
             }
         }
         guard !windows.isEmpty || !extras.isEmpty else { throw UsageError.decoding("no rate_limit windows in Codex usage") }
-        return UsageSnapshot(windows: windows, extraWindows: extras, plan: string(obj["plan_type"]), observedAt: now)
+        let credits = number(dict(obj["rate_limit_reset_credits"])?["available_count"]).map { ResetCredits(available: Int($0)) }
+        return UsageSnapshot(windows: windows, extraWindows: extras, plan: string(obj["plan_type"]), resetCredits: credits, observedAt: now)
+    }
+
+    public static let resetCreditsURL = URL(string: "https://chatgpt.com/backend-api/wham/rate-limit-reset-credits")!
+
+    /// The soonest expiry among available saved resets. Only this separate endpoint lists them;
+    /// it's rate limited hard, so `UsageService` asks rarely.
+    public static func nextResetCreditExpiry(token: OAuthToken, client: HTTPClient) async throws -> Date? {
+        nextResetCreditExpiry(try await HTTP.json(client, HTTP.request(resetCreditsURL, headers: headers(token))))
+    }
+
+    static func nextResetCreditExpiry(_ obj: [String: Any]) -> Date? {
+        (obj["credits"] as? [[String: Any]] ?? [])
+            .filter { string($0["status"]) == "available" }
+            .compactMap { parseISODate($0["expires_at"]) }
+            .min()
     }
 
     public static func accountId(fromJWT jwt: String) -> String? {
