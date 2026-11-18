@@ -35,6 +35,16 @@ public enum Claude {
         return snapshot
     }
 
+    /// Plan id for `Format.planLabel`: "max_5x" / "max_20x" from the rate-limit tier, else the subscription
+    /// type ("pro", "max", "team", "claude_max"…).
+    public static func planName(subscription: String?, tier: String?) -> String? {
+        if let tier, let m = tier.lowercased().range(of: #"max_\d+x"#, options: .regularExpression) {
+            return String(tier.lowercased()[m])
+        }
+        guard let subscription, !subscription.isEmpty else { return nil }
+        return subscription.lowercased()
+    }
+
     public static func parse(_ obj: [String: Any], now: Date = Date()) throws -> UsageSnapshot {
         func window(_ key: String, _ kind: WindowKind, _ label: String?, _ minutes: Int) -> UsageWindow? {
             guard let w = dict(obj[key]), let pct = number(w["utilization"]) else { return nil }
