@@ -76,9 +76,26 @@ public struct UsageWindow: Codable, Equatable, Sendable {
         return min(1, max(0, 1 - left))
     }
 
-    /// Nothing used yet. Providers start a window's clock on first use (until then Codex keeps
-    /// reporting a reset a full window from now, Claude none), so there's no countdown or pace to show.
-    public var isUntouched: Bool { usedPercent <= 0 }
+    /// Not started yet: nothing used and no reset to count down to. Providers start a window's clock on
+    /// first use; until then Claude reports no reset and Codex one a full window ahead, which
+    /// `observed(at:)` drops. A window at 0% whose reset is nearer than a full window has started
+    /// (usage rounded down to 0), so it keeps its countdown and pace cursor.
+    public var isUntouched: Bool { usedPercent <= 0 && resetsAt == nil }
+
+    /// Slack when comparing a reset with "a full window from the observation": clock skew between
+    /// the provider and this Mac, and resets reported to the minute (Kimi) rather than the second.
+    public static let fullWindowTolerance: TimeInterval = 120
+
+    /// This window as seen at `date`: with nothing used and the reset (within `fullWindowTolerance`)
+    /// a full window after `date`, the window hasn't started and the reset is only "a full window
+    /// from now", so it's dropped.
+    public func observed(at date: Date) -> UsageWindow {
+        guard usedPercent <= 0, let resetsAt, let minutes = windowMinutes, minutes > 0,
+              resetsAt.timeIntervalSince(date) >= Double(minutes) * 60 - Self.fullWindowTolerance else { return self }
+        var window = self
+        window.resetsAt = nil
+        return window
+    }
 
     /// How much of a meter's fill is on pace (drawn green) and how much is ahead of it (amber), in display %.
     /// Used: the fill up to the time cursor is on pace, the part past it is ahead. Remaining: the whole fill is
@@ -120,11 +137,22 @@ public struct UsageSnapshot: Codable, Equatable, Sendable {
     public var observedAt: Date
 
     public init(windows: [UsageWindow], extraWindows: [UsageWindow] = [], balance: Balance? = nil, plan: String? = nil, observedAt: Date = Date()) {
-        self.windows = windows
-        self.extraWindows = extraWindows
+        self.windows = windows.map { $0.observed(at: observedAt) }
+        self.extraWindows = extraWindows.map { $0.observed(at: observedAt) }
         self.balance = balance
         self.plan = plan
         self.observedAt = observedAt
+    }
+
+    /// Goes through `init` so snapshots saved before `UsageWindow.observed(at:)` existed drop a
+    /// not-started window's reset too.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(windows: try c.decode([UsageWindow].self, forKey: .windows),
+                  extraWindows: try c.decodeIfPresent([UsageWindow].self, forKey: .extraWindows) ?? [],
+                  balance: try c.decodeIfPresent(Balance.self, forKey: .balance),
+                  plan: try c.decodeIfPresent(String.self, forKey: .plan),
+                  observedAt: try c.decode(Date.self, forKey: .observedAt))
     }
 
     public var fiveHour: UsageWindow? { windows.first { $0.kind == .fiveHour } }

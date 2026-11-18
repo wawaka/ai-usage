@@ -120,9 +120,54 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(w.display(remaining: true, now: now).time!, 0.8, accuracy: 1e-9)
         XCTAssertNil(UsageWindow(kind: .sevenDay, usedPercent: 1, resetsAt: nil).elapsedFraction())
         let untouched = UsageWindow(kind: .fiveHour, usedPercent: 0, resetsAt: now.addingTimeInterval(5 * 3600), windowMinutes: 300)
+            .observed(at: now)
         XCTAssertTrue(untouched.isUntouched)
         XCTAssertNil(untouched.display(remaining: false, now: now).time, "no time position before the window starts")
         XCTAssertEqual(untouched.display(remaining: true, now: now).percent, 100)
+    }
+
+    func testUntouchedMeansNoUsageAndAFullWindowLeft() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        func codex(_ used: Int, resetAfter: Int) throws -> UsageWindow {
+            try Codex.parse(obj("""
+            {"rate_limit":{"primary_window":{"used_percent":\(used),"limit_window_seconds":18000,"reset_after_seconds":\(resetAfter)}}}
+            """), now: now).fiveHour!
+        }
+        // Codex keeps reporting "a full window from now" until first use: not started, no reset.
+        let fresh = try codex(0, resetAfter: 18000)
+        XCTAssertTrue(fresh.isUntouched)
+        XCTAssertNil(fresh.resetsAt)
+        XCTAssertNil(fresh.display(remaining: false, now: now).time)
+        // Rounded or minute-truncated resets still count as a full window.
+        XCTAssertTrue(try codex(0, resetAfter: 18000 - 90).isUntouched)
+        // 0% but less than a full window left: the clock is running (usage rounded down to 0).
+        let started = try codex(0, resetAfter: 4 * 3600)
+        XCTAssertFalse(started.isUntouched)
+        XCTAssertEqual(started.display(remaining: false, now: now).time!, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(started.paceSplit(remaining: true, now: now).onPace, 100)
+        XCTAssertFalse(try codex(1, resetAfter: 18000).isUntouched)
+
+        // Claude reports no reset before first use, and the real one once the window runs.
+        let claude = try Claude.parse(obj("""
+        {"five_hour":{"utilization":0,"resets_at":null},
+         "seven_day":{"utilization":0,"resets_at":"\(ISO8601DateFormatter().string(from: now.addingTimeInterval(3 * 86400)))"}}
+        """), now: now)
+        XCTAssertTrue(claude.fiveHour!.isUntouched)
+        XCTAssertFalse(claude.sevenDay!.isUntouched)
+        XCTAssertNotNil(claude.sevenDay!.display(remaining: false, now: now).time)
+    }
+
+    func testSavedSnapshotDropsNotStartedResetOnLoad() throws {
+        // Written before `observed(at:)` existed: a 0% window with a reset a full window ahead.
+        let observed = Date(timeIntervalSince1970: 1_800_000_000)
+        let raw = UsageWindow(kind: .fiveHour, usedPercent: 0, resetsAt: observed.addingTimeInterval(18000), windowMinutes: 300)
+        let window = String(decoding: try JSONEncoder().encode(raw), as: UTF8.self)
+        let saved = #"{"windows":[\#(window)],"observedAt":\#(observed.timeIntervalSinceReferenceDate)}"#
+        let snapshot = try JSONDecoder().decode(UsageSnapshot.self, from: Data(saved.utf8))
+        XCTAssertTrue(snapshot.fiveHour!.isUntouched)
+        XCTAssertEqual(snapshot.extraWindows, [])
+        let roundTrip = try JSONDecoder().decode(UsageSnapshot.self, from: JSONEncoder().encode(snapshot))
+        XCTAssertEqual(roundTrip, snapshot)
     }
 
     func testPaceSplit() {

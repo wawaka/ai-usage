@@ -139,6 +139,11 @@ public actor UsageService {
         visibleAccounts().filter { a in (nextRefresh(a.id) ?? now) <= now }
     }
 
+    /// When the next visible account's automatic update is due (nil when none is scheduled).
+    public func nextDue() -> Date? {
+        visibleAccounts().compactMap { nextRefresh($0.id) }.min()
+    }
+
     public func nextRefresh(_ id: String) -> Date? {
         schedule[id]?.nextDue ?? lastSnapshots[id].map { $0.observedAt.addingTimeInterval(policy.minInterval) }
     }
@@ -146,8 +151,14 @@ public actor UsageService {
     /// Updates the account's schedule after a poll: back to the minimum interval when the numbers
     /// changed, doubled (up to the maximum) when they didn't or the poll failed. A rate limit waits
     /// at least as long as the provider asked; refreshes are refused until then.
+    ///
+    /// Around a window reset: the next poll is pulled forward to `PollPolicy.resetGrace` after the
+    /// earliest upcoming reset. If a successful poll (`fetched`) still reports a reset that has
+    /// passed, the provider hasn't rolled the window over yet (its reset may be rounded to the
+    /// minute, or its clock behind this Mac's), so it's asked once more `PollPolicy.resetRecheck`
+    /// later; after that the normal schedule applies.
     private func reschedule(_ id: String, changed: Bool, rateLimited: Bool = false, retryAfter: TimeInterval? = nil,
-                            snapshot: UsageSnapshot?, now: Date) {
+                            snapshot: UsageSnapshot?, fetched: Bool = false, now: Date) {
         var s = schedule[id] ?? PollState(interval: policy.minInterval, nextDue: now)
         // Consume each known reset once, even if the endpoint still returns the old window.
         let resetPassed = lastSnapshots[id]?.windows.compactMap(\.resetsAt).contains {
@@ -160,9 +171,16 @@ public actor UsageService {
         if rateLimited {
             if let retryAfter { wait = max(wait, retryAfter) }
             s.blockedUntil = now.addingTimeInterval(retryAfter ?? PollPolicy.rateLimitCooldown)
-        } else if let next = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 > now }).min() {
-            // Catch a window reset soon after it happens instead of up to `maxInterval` later.
-            wait = min(wait, next.timeIntervalSince(now) + 30)
+        } else {
+            if fetched, let pending = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 <= now }).max(),
+               pending != s.recheckedReset {
+                s.recheckedReset = pending
+                wait = min(wait, PollPolicy.resetRecheck)
+            }
+            if let next = snapshot?.windows.compactMap(\.resetsAt).filter({ $0 > now }).min() {
+                // Catch a window reset right after it happens instead of up to `maxInterval` later.
+                wait = min(wait, next.timeIntervalSince(now) + PollPolicy.resetGrace)
+            }
         }
         s.nextDue = now.addingTimeInterval(wait)
         schedule[id] = s
@@ -210,7 +228,7 @@ public actor UsageService {
         }
         do {
             let snapshot = try await fetch(account)
-            reschedule(account.id, changed: snapshot.usageDiffers(from: stale), snapshot: snapshot, now: now)
+            reschedule(account.id, changed: snapshot.usageDiffers(from: stale), snapshot: snapshot, fetched: true, now: now)
             lastSnapshots[account.id] = snapshot
             snapshotStore.save(lastSnapshots)
             var status = AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
@@ -324,6 +342,11 @@ public struct PollPolicy: Sendable, Equatable {
     public var maxInterval: TimeInterval
     /// After a 429 without `Retry-After`, refreshes (manual ones too) are refused for this long.
     public static let rateLimitCooldown: TimeInterval = 120
+    /// The poll after a window reset comes this long after the reported reset time, so the
+    /// provider's backend has had a moment to roll the window over instead of returning the old one.
+    public static let resetGrace: TimeInterval = 10
+    /// When that poll still shows the old window, it's repeated once after this long.
+    public static let resetRecheck: TimeInterval = 60
 
     public init(minInterval: TimeInterval = 120, maxInterval: TimeInterval = 1800) {
         self.minInterval = max(30, minInterval)
@@ -336,4 +359,6 @@ struct PollState: Codable {
     var nextDue: Date
     var blockedUntil: Date?
     var lastResetCheck: Date?
+    /// The passed reset that already got its one recheck (see `reschedule`).
+    var recheckedReset: Date?
 }

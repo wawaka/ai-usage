@@ -68,15 +68,56 @@ final class PollingTests: XCTestCase {
             let (service, account) = try await makeService(http)
             for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
             let due = await service.nextRefresh(account.id)
-            XCTAssertEqual(due, reset.addingTimeInterval(30), kind)
+            XCTAssertEqual(due, reset.addingTimeInterval(10), kind)
 
-            _ = await service.refresh(account, now: reset.addingTimeInterval(30))
-            let restarted = await service.nextRefresh(account.id)
-            XCTAssertEqual(restarted, reset.addingTimeInterval(90), kind)
-            _ = await service.refresh(account, now: reset.addingTimeInterval(90))
+            // Still the old window: asked once more a minute later.
+            _ = await service.refresh(account, now: reset.addingTimeInterval(10))
+            let rechecked = await service.nextRefresh(account.id)
+            XCTAssertEqual(rechecked, reset.addingTimeInterval(70), kind)
+            // Still old: no second recheck, and the old reset restarted backoff only once.
+            _ = await service.refresh(account, now: reset.addingTimeInterval(70))
             let backedOff = await service.nextRefresh(account.id)
-            XCTAssertEqual(backedOff, reset.addingTimeInterval(210), "old reset must only restart backoff once")
+            XCTAssertEqual(backedOff, reset.addingTimeInterval(190), kind)
         }
+    }
+
+    func testNoRecheckOnceTheProviderHasRolledTheWindowOver() async throws {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let reset = t0.addingTimeInterval(300)
+        func body(_ used: Int, _ resetsAt: Date?) throws -> HTTPResponse {
+            let r: Any = resetsAt.map { ISO8601DateFormatter().string(from: $0) } ?? NSNull()
+            return HTTPResponse(status: 200, body: try JSONSerialization.data(withJSONObject: [
+                "five_hour": ["utilization": used, "resets_at": r],
+                "seven_day": ["utilization": 1, "resets_at": NSNull()]]))
+        }
+        let http = ScriptedHTTP(try body(100, reset))
+        let (service, account) = try await makeService(http)
+        await service.setPolicy(PollPolicy(minInterval: 120, maxInterval: 400))
+        for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
+        // Minute-precision resets ("…:38:00Z") are covered the same way: the poll lands 10 s into
+        // the reported minute and, if the window hasn't rolled yet, the recheck one minute later.
+        http.next = try body(0, nil)
+        _ = await service.refresh(account, now: reset.addingTimeInterval(10))
+        let next = await service.nextRefresh(account.id)
+        XCTAssertEqual(next, reset.addingTimeInterval(130), "rolled over: minimum interval, no recheck")
+        _ = await service.refresh(account, now: reset.addingTimeInterval(130))
+        let after = await service.nextRefresh(account.id)
+        XCTAssertEqual(after, reset.addingTimeInterval(370), "unchanged: normal backoff")
+    }
+
+    func testFailedPollAfterResetIsNotRechecked() async throws {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let reset = t0.addingTimeInterval(300)
+        let http = ScriptedHTTP(HTTPResponse(status: 200, body: try JSONSerialization.data(withJSONObject: [
+            "five_hour": ["utilization": 100, "resets_at": ISO8601DateFormatter().string(from: reset)],
+            "seven_day": ["utilization": 1, "resets_at": NSNull()]])))
+        let (service, account) = try await makeService(http)
+        await service.setPolicy(PollPolicy(minInterval: 120, maxInterval: 400))
+        for _ in 0..<4 { _ = await service.refresh(account, now: t0) }
+        http.next = HTTPResponse(status: 500, body: Data())
+        _ = await service.refresh(account, now: reset.addingTimeInterval(10))
+        let next = await service.nextRefresh(account.id)
+        XCTAssertEqual(next, reset.addingTimeInterval(130), "reset restarts backoff at the minimum, no extra recheck")
     }
 
     func testRateLimitHonoursRetryAfterAndBlocksRequests() async throws {

@@ -85,6 +85,9 @@ final class AppModel: ObservableObject {
     let service: UsageService
     let keychain: SystemKeychainReader
     private var timer: Timer?
+    /// Fires when the next account is due, so a poll scheduled just after a window reset isn't
+    /// held back until the next 30 s tick.
+    private var dueTimer: Timer?
     private var cancellables: Set<AnyCancellable> = []
 
     init(settings: AppSettings) {
@@ -135,9 +138,24 @@ final class AppModel: ObservableObject {
     /// Fetches only the accounts whose automatic update is due.
     func poll() {
         Task {
-            guard !(await service.dueAccounts()).isEmpty else { return }
-            await rescanAndFetch { await $0.dueAccounts() }
+            if !(await service.dueAccounts()).isEmpty { await rescanAndFetch { await $0.dueAccounts() } }
+            await scheduleDueTimer()
         }
+    }
+
+    private func scheduleDueTimer() async {
+        dueTimer?.invalidate()
+        dueTimer = nil
+        guard let due = await service.nextDue() else { return }
+        // The 30 s tick covers anything sooner (and acts as the fallback after sleep).
+        let delay = due.timeIntervalSinceNow
+        guard delay > 1 else { return }
+        let timer = Timer(timeInterval: delay, repeats: false) { [weak self] _ in
+            Task { @MainActor in self?.poll() }
+        }
+        timer.tolerance = 1
+        RunLoop.main.add(timer, forMode: .common)
+        dueTimer = timer
     }
 
     /// Re-reads local credentials and fetches every visible account now (accounts still inside a
@@ -175,6 +193,7 @@ final class AppModel: ObservableObject {
                 let status = await service.refresh(account)
                 refreshingIDs.remove(account.id)
                 if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
+                await scheduleDueTimer()
             }
         }
     }
