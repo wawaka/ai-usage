@@ -213,16 +213,15 @@ final class ProviderTests: XCTestCase {
     }
 
     func testFormatResetCredits() {
-        var cal = Calendar(identifier: .gregorian); cal.timeZone = TimeZone(identifier: "UTC")!
         let now = ISO8601DateFormatter().date(from: "2026-10-30T10:00:00Z")!
-        XCTAssertEqual(Format.resetCredits(nil, now: now, calendar: cal), "")
-        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 0), now: now, calendar: cal), "")
-        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 2), now: now, calendar: cal), "2 left")
-        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 3, nextExpiresAt: now.addingTimeInterval(86400 * 6)), now: now, calendar: cal),
-                       "3 left · next expires 11/5")
-        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(3600)), now: now, calendar: cal),
-                       "1 left · expires 11:00")
-        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(-1)), now: now, calendar: cal), "1 left")
+        XCTAssertEqual(Format.resetCredits(nil, now: now), "")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 0), now: now), "")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 2), now: now), "2 left")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 3, nextExpiresAt: now.addingTimeInterval(86400 * 6 + 3600 * 4)), now: now),
+                       "3 left · next expires in 6d 4h")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(3600 + 720)), now: now),
+                       "1 left · expires in 1h 12m")
+        XCTAssertEqual(Format.resetCredits(ResetCredits(available: 1, nextExpiresAt: now.addingTimeInterval(-1)), now: now), "1 left")
     }
 
     func testPaceSplit() {

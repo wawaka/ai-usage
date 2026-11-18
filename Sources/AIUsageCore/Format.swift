@@ -55,15 +55,11 @@ public enum Format {
         return words.map { $0.prefix(1).uppercased() + $0.dropFirst().lowercased() }.joined(separator: " ")
     }
 
-    /// "2 left · next expires 12/5" (time of day when it's today), or "" when there are none.
-    public static func resetCredits(_ credits: ResetCredits?, now: Date = Date(), calendar: Calendar = .current) -> String {
+    /// "2 left · next expires in 3d 4h" (same countdown as the windows), or "" when there are none.
+    public static func resetCredits(_ credits: ResetCredits?, now: Date = Date()) -> String {
         guard let credits, credits.available > 0 else { return "" }
         let count = "\(credits.available) left"
         guard let expiry = credits.nextExpiresAt, expiry > now else { return count }
-        let f = DateFormatter()
-        f.calendar = calendar
-        f.timeZone = calendar.timeZone
-        f.dateFormat = calendar.isDate(expiry, inSameDayAs: now) ? "HH:mm" : "M/d"
-        return "\(count) · \(credits.available == 1 ? "expires" : "next expires") \(f.string(from: expiry))"
+        return "\(count) · \(credits.available == 1 ? "expires" : "next expires") in \(countdown(expiry, now: now))"
     }
 }
