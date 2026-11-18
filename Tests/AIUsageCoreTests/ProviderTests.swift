@@ -170,30 +170,6 @@ final class ProviderTests: XCTestCase {
         XCTAssertEqual(roundTrip, snapshot)
     }
 
-    func testClaudeResetCredits() throws {
-        let now = ISO8601DateFormatter().date(from: "2026-10-01T00:00:00Z")!
-        func parse(_ cedar: String) throws -> ResetCredits? {
-            try Claude.parse(obj(#"{"five_hour":{"utilization":5,"resets_at":null},"cedar_ember":\#(cedar)}"#), now: now).resetCredits
-        }
-        // Shape reported from the live endpoint with `cedar_ember=1`.
-        let credits = try parse("""
-        {"eligible":true,"next_grant_id":"g3","grants":[
-          {"id":"g1","label":"x","resets_total":2,"resets_left":2,"starts_at":"2026-09-22T16:00:00+00:00",
-           "ends_at":"2026-10-22T16:00:00+00:00","clears":["five_hour","seven_day"],"paused":false,"usable_now":false},
-          {"id":"g2","resets_total":1,"resets_left":1,"starts_at":"2026-09-25T16:00:00.123456+00:00",
-           "ends_at":"2026-10-12T16:00:00+00:00","clears":["five_hour"],"paused":false},
-          {"id":"used","resets_total":1,"resets_left":0,"ends_at":"2026-10-02T00:00:00Z"},
-          {"id":"paused","resets_total":1,"resets_left":1,"paused":true,"ends_at":"2026-10-02T00:00:00Z"},
-          {"id":"ended","resets_total":1,"resets_left":1,"ends_at":"2026-09-30T00:00:00Z"},
-          {"id":"future","resets_total":1,"resets_left":1,"starts_at":"2026-10-05T00:00:00Z"}]}
-        """)
-        XCTAssertEqual(credits?.available, 3)
-        XCTAssertEqual(credits?.nextExpiresAt, ISO8601DateFormatter().date(from: "2026-10-12T16:00:00Z"))
-        XCTAssertNil(try parse("null"))
-        XCTAssertNil(try parse(#"{"eligible":false,"ineligible_reason":"surface","grants":[]}"#))
-        XCTAssertNil(try Claude.parse(obj(#"{"five_hour":{"utilization":5,"resets_at":null}}"#)).resetCredits)
-    }
-
     func testCodexResetCredits() throws {
         let s = try Codex.parse(obj("""
         {"plan_type":"plus","rate_limit":{"primary_window":{"used_percent":3,"limit_window_seconds":604800}},

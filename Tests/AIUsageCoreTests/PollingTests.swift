@@ -156,24 +156,6 @@ final class PollingTests: XCTestCase {
 }
 
 extension PollingTests {
-    func testClaudeAsksForResetsAndFallsBackWhenTheOptInIsRejected() async throws {
-        let usage = #"{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":1,"resets_at":null},"cedar_ember":{"eligible":true,"grants":[{"resets_left":1,"ends_at":"2099-01-01T00:00:00Z"}]}}"#
-        var rejectOptIn = false
-        let http = MockHTTP { req in
-            if req.url?.path.hasSuffix("/profile") == true { return (200, "{}") }
-            if req.url?.query?.contains("cedar_ember=1") == true { return rejectOptIn ? (400, "bad param") : (200, usage) }
-            return (200, #"{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":1,"resets_at":null}}"#)
-        }
-        let (service, account) = try await makeService(http)
-        let first = await service.refresh(account)
-        XCTAssertEqual(first.snapshot?.resetCredits?.available, 1)
-        rejectOptIn = true
-        let second = await service.refresh(account)
-        XCTAssertNil(second.error)
-        XCTAssertEqual(second.snapshot?.fiveHour?.usedPercent, 10)
-        XCTAssertNil(second.snapshot?.resetCredits)
-    }
-
     func testCodexResetExpiryIsAskedRarely() async throws {
         var count = 2
         var listStatus = 200

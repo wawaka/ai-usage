@@ -129,7 +129,7 @@ public struct Balance: Codable, Equatable, Sendable {
     }
 }
 
-/// Saved usage-limit resets the user can redeem (Claude's and Codex's "reset credits").
+/// Saved usage-limit resets the user can redeem (Codex's "reset credits").
 public struct ResetCredits: Codable, Equatable, Sendable {
     /// Resets that can be redeemed now or later.
     public var available: Int

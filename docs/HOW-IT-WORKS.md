@@ -77,11 +77,10 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
   at all) hasn't started; providers start its clock on first use. It's drawn as a plain grey bar,
   with no countdown and no refresh guide. At 0% with less than a full window left, the clock is
   running (usage rounded down), so the countdown and guide are shown.
-- **Saved resets:** Claude and Codex accounts with usage-limit resets to redeem show a *Resets* line
+- **Saved resets:** Codex accounts with usage-limit resets to redeem show a *Resets* line
   in the dropdown: how many are left and how long until the next one expires. Codex lists expiry dates only
   on a separate, heavily rate-limited endpoint, so it's asked only when the count changes, the known
-  date passes, or 6 hours have gone by. Claude lists them in its usage response only for accounts
-  its server reports as eligible.
+  date passes, or 6 hours have gone by.
 - **Usage refresh guide:** the cursor sits at the fraction of the window's time that has elapsed,
   or remained when *Show remaining* is on.
 
