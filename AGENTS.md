@@ -7,7 +7,7 @@ AI Usage is a native macOS menu bar app (Swift 6.2+ package; AppKit + SwiftUI; r
 ## Delivery workflow
 
 - Commit and push changes directly to `main` by default. Do not create pull requests unless the user explicitly asks for one.
-- Run the checks appropriate to the change and verify CI after pushing.
+- Run the checks appropriate to the change. No workflow runs automatically (no push, tag or PR triggers): start CI by hand when needed (`gh workflow run build.yml --ref main`).
 
 ## Commands
 
@@ -30,7 +30,7 @@ docker run --rm -v "$PWD":/src -w /src swift:6.4-noble bash -c "swift test --bui
 docker run --rm -v "$PWD":/src -w /src swift:6.4-noble swiftc -parse Sources/AIUsage/*.swift
 ```
 
-`Package.swift` declares the `AIUsage` app target only inside `#if os(macOS)`. `AIUsageCore`, the CLI and the tests use the Swift 6 language mode (strict concurrency). The app target stays in Swift 5 mode, because it can't be compiled off a Mac to audit it. CI (`.github/workflows/build.yml`) runs the core tests on Linux. On macOS it also packages the app; `v*` tags attach the zip to a release.
+`Package.swift` declares the `AIUsage` app target only inside `#if os(macOS)`. `AIUsageCore`, the CLI and the tests use the Swift 6 language mode (strict concurrency). The app target stays in Swift 5 mode, because it can't be compiled off a Mac to audit it. CI (`.github/workflows/build.yml`, manual only) runs the core tests on Linux. On macOS it also packages the app. `release.yml` (manual only, run on a `v*` tag) publishes a release.
 
 ## Architecture
 

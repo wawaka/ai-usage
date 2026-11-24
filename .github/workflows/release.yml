@@ -1,12 +1,12 @@
 name: release
 
-# Push a tag matching VERSION (e.g. `git tag v1.0.1 && git push origin v1.0.1`) to publish a release:
-# tests, a signed build, the GitHub release with the zip, and the updated cask in the Homebrew tap.
+# Manual only. Push a tag matching VERSION, then run this workflow on that tag
+# (`gh workflow run release.yml --ref v1.0.1`) to publish a release: tests, a signed build,
+# the GitHub release with the zip, and the updated cask in the Homebrew tap.
 # Secrets and setup: docs/DEVELOPMENT.md → Releases.
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write   # create the release
@@ -29,7 +29,7 @@ jobs:
       - name: Check the tag matches VERSION
         run: |
           if [[ "$GITHUB_REF_NAME" != "v$(cat VERSION)" ]]; then
-            echo "::error::tag $GITHUB_REF_NAME doesn't match VERSION ($(cat VERSION))"
+            echo "::error::run this on the tag v$(cat VERSION), not $GITHUB_REF_NAME (gh workflow run release.yml --ref v$(cat VERSION))"
             exit 1
           fi
 

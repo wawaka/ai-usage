@@ -54,12 +54,13 @@ with the self-signed one.
 
 ## Releases
 
-Releases are published by `.github/workflows/release.yml` on a `v*` tag and installed with
+Releases are published by `.github/workflows/release.yml`, run by hand on a `v*` tag, and installed with
 `brew install --cask wawaka/tap/ai-usage`. See [RELEASE.md](RELEASE.md) for the one-time setup
 (certificate, secrets, tap), the per-release steps and yearly certificate renewal.
 
 CI (`.github/workflows/build.yml`) runs the core tests on Linux, and on macOS builds an ad-hoc signed
-zip, uploaded as the `AIUsage-zip` artifact of each run.
+zip, uploaded as the `AIUsage-zip` artifact of each run. Nothing runs automatically: start it with
+`gh workflow run build.yml --ref <branch>` or from the Actions tab.
 
 ## CLI
 

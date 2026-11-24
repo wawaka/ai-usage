@@ -1,7 +1,7 @@
 # Releasing AI Usage
 
-Releases are built and published by GitHub Actions (`.github/workflows/release.yml`) when you push a
-`v*` tag. Users install with Homebrew from the tap:
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`) when you run it
+by hand on a `v*` tag (pushing the tag alone starts nothing). Users install with Homebrew from the tap:
 
 ```sh
 brew install --cask wawaka/tap/ai-usage
@@ -106,11 +106,15 @@ Without `TAP_TOKEN` a release still publishes; the tap step is skipped with a wa
    git tag v$(cat VERSION)
    git push origin main v$(cat VERSION)
    ```
-3. **Watch it** (about 5–10 minutes):
+3. **Start the release** on that tag:
+   ```sh
+   gh workflow run release.yml --ref v$(cat VERSION)
+   ```
+4. **Watch it** (about 5–10 minutes):
    ```sh
    gh run watch $(gh run list --workflow release.yml -L 1 --json databaseId -q '.[0].databaseId')
    ```
-4. **Check the result:**
+5. **Check the result:**
    ```sh
    gh release view v$(cat VERSION)                       # zip attached
    brew update && brew info --cask wawaka/tap/ai-usage   # new version
@@ -137,13 +141,13 @@ Also renew `TAP_TOKEN` before it expires (step 1.4).
 
 | Failure | Fix |
 |---|---|
-| *tag … doesn't match VERSION* | Delete the tag (`git push --delete origin vX; git tag -d vX`), fix `VERSION`, tag again |
+| *run this on the tag …* | Run it with `--ref v$(cat VERSION)`; if the tag is wrong, delete it (`git push --delete origin vX; git tag -d vX`), fix `VERSION`, tag again |
 | *MACOS_CERT_P12 secret is not set* / *no valid … identity* | Redo step 1.2; export from *My Certificates* so the key is included |
 | `security import` fails | Wrong `MACOS_CERT_PASSWORD`, or the base64 got mangled: redo step 1.2 |
 | *no Team ID in the signature* | The `.p12` isn't an Apple Development or Developer ID certificate |
 | Tap push fails (403) | `TAP_TOKEN` expired or lacks *Contents: write* on the tap: step 1.4 |
-| Re-run a failed release | `gh run rerun <id>`, or delete and re-push the tag; the release step replaces the zip |
-| Users still asked for Keychain access after an update | Check the release's `TeamIdentifier` (section 2, step 4) is the same as before |
+| Re-run a failed release | `gh run rerun <id>`, or run the workflow on the tag again; the release step replaces the zip |
+| Users still asked for Keychain access after an update | Check the release's `TeamIdentifier` (section 2, step 5) is the same as before |
 
 ## 5. Later: a paid Developer ID
 
