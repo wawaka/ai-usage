@@ -9,9 +9,12 @@ public actor UsageService {
     private let stateStore: JSONFileStore<AccountsState>
     private let snapshotStore: JSONFileStore<[String: UsageSnapshot]>
     private let scheduleStore: JSONFileStore<[String: PollState]>
+    private let historyStore: JSONFileStore<UsageHistory>
 
     public private(set) var state: AccountsState
     private var lastSnapshots: [String: UsageSnapshot]
+    /// Every window's usage over the last weeks, for the charts.
+    public private(set) var history: UsageHistory
     private var discovered: [String: DiscoveredCredential] = [:]
 
     public private(set) var policy = PollPolicy()
@@ -29,12 +32,14 @@ public actor UsageService {
         stateStore = JSONFileStore("accounts.json", directory: directory)
         snapshotStore = JSONFileStore("snapshots.json", directory: directory)
         scheduleStore = JSONFileStore("schedule.json", directory: directory)
+        historyStore = JSONFileStore("history.json", directory: directory, pretty: false)
         state = stateStore.load() ?? AccountsState()
         // Usage history from the removed pacing feature; it is AI Usage's own file.
         try? FileManager.default.removeItem(at: directory.appendingPathComponent("samples.json"))
         lastSnapshots = snapshotStore.load() ?? [:]
         // Persisted so a relaunch honours each account's interval and any provider rate limit.
         schedule = scheduleStore.load() ?? [:]
+        history = historyStore.load() ?? UsageHistory()
     }
 
     // MARK: Accounts
@@ -98,6 +103,8 @@ public actor UsageService {
         state.hidden.remove(id)
         lastSnapshots[id] = nil
         schedule[id] = nil
+        history.remove(id)
+        historyStore.save(history)
         scheduleStore.save(schedule)
         stateStore.save(state)
         snapshotStore.save(lastSnapshots)
@@ -114,6 +121,8 @@ public actor UsageService {
         // The browser may select a different account. Don't carry its old usage or plan forward.
         lastSnapshots[account.id] = nil
         schedule[account.id] = nil
+        history.remove(account.id)
+        historyStore.save(history)
         planLookups.remove(account.id)
         stateStore.save(state)
         snapshotStore.save(lastSnapshots)
@@ -239,6 +248,7 @@ public actor UsageService {
             reschedule(account.id, changed: snapshot.usageDiffers(from: stale), snapshot: snapshot, fetched: true, now: now)
             lastSnapshots[account.id] = snapshot
             snapshotStore.save(lastSnapshots)
+            recordHistory(snapshot, for: account.id, now: now)
             var status = AccountStatus(account: account, snapshot: snapshot, error: nil, analysis: .of(snapshot))
             status.nextRefresh = schedule[account.id]?.nextDue
             return status
@@ -254,6 +264,12 @@ public actor UsageService {
             reschedule(account.id, changed: false, snapshot: stale, now: now)
             return failed(account, stale, (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
         }
+    }
+
+    private func recordHistory(_ snapshot: UsageSnapshot, for id: String, now: Date) {
+        history.record(snapshot, for: id, at: now)
+        history.prune(now: now)
+        historyStore.save(history)
     }
 
     static func rateLimitMessage(until: Date) -> String {

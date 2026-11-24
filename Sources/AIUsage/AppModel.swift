@@ -80,6 +80,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var deniedKeychainItems: Set<String> = []
     /// Accounts with a fetch in flight (each shows its own spinner).
     @Published private(set) var refreshingIDs: Set<String> = []
+    /// Recorded usage of every window, for the charts in the dropdown.
+    @Published private(set) var history = UsageHistory()
 
     let settings: AppSettings
     let service: UsageService
@@ -118,6 +120,7 @@ final class AppModel: ObservableObject {
             await service.setPolicy(settings.pollPolicy)
             await service.rescan()
             statuses = await service.cachedStatuses()
+            history = await service.history
             await reloadAccounts()
             // Ask for all Keychain access now, even for accounts whose next poll is later.
             await service.prepareCredentials()
@@ -193,6 +196,7 @@ final class AppModel: ObservableObject {
                 let status = await service.refresh(account)
                 refreshingIDs.remove(account.id)
                 if let i = statuses.firstIndex(where: { $0.id == account.id }) { statuses[i] = status }
+                history = await service.history
                 await scheduleDueTimer()
             }
         }
@@ -237,6 +241,7 @@ final class AppModel: ObservableObject {
     func remove(_ account: Account) {
         Task {
             await service.removeManaged(account.id)
+            history = await service.history
             await reloadAccounts()
             statuses.removeAll { $0.id == account.id }
         }

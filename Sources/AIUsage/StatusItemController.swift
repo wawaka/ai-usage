@@ -25,7 +25,10 @@ final class StatusItemController: NSObject, NSPopoverDelegate {
         popover.behavior = .transient
         popover.animates = false
         popover.delegate = self
-        popover.contentViewController = NSHostingController(rootView: PanelView(model: model, settings: settings, clock: clock, actions: actions))
+        let hosting = NSHostingController(rootView: PanelView(model: model, settings: settings, clock: clock, actions: actions))
+        // The popover follows the panel's height, which changes when a usage chart opens or closes.
+        hosting.sizingOptions = .preferredContentSize
+        popover.contentViewController = hosting
 
         if let button = item.button {
             button.target = self

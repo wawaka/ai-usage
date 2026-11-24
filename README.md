@@ -79,6 +79,12 @@ CLI, OpenCode or Pi on this Mac, their accounts appear within a few seconds.
 - **Style:** choose Horizontal bars, Vertical bars, Circular dials or Numbers.
 - **Account names** (⌘N): hide emails, e.g. for screenshots.
 
+**Usage history.** Every update is recorded locally (four to five weeks are kept). Click a
+5h/7d bar in the dropdown to open the chart of that window's current interval: its start and
+reset are marked, the dashed diagonal is an even pace to the reset, and usage ahead of it turns
+amber. Hover for the value at any moment. Step back with ‹ ›, or click a block in the strip
+below, one per past interval, sized by its peak.
+
 **Per account:**
 - **Menu bar** checkbox: keep the account in the dropdown but not the menu bar.
 - **Hide:** remove it from the list. Bring it back in Accounts….

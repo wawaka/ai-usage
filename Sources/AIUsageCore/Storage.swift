@@ -71,9 +71,12 @@ public final class FileSecretStore: SecretStore, @unchecked Sendable {
 public final class JSONFileStore<Value: Codable>: @unchecked Sendable {
     private let url: URL
     private let lock = NSLock()
+    private let pretty: Bool
 
-    public init(_ name: String, directory: URL = AppPaths.supportDirectory) {
+    /// `pretty: false` for large files written often (the usage history).
+    public init(_ name: String, directory: URL = AppPaths.supportDirectory, pretty: Bool = true) {
         url = directory.appendingPathComponent(name)
+        self.pretty = pretty
     }
 
     public func load() -> Value? {
@@ -90,7 +93,7 @@ public final class JSONFileStore<Value: Codable>: @unchecked Sendable {
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             let encoder = JSONEncoder()
             encoder.dateEncodingStrategy = .secondsSince1970
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.outputFormatting = pretty ? [.prettyPrinted, .sortedKeys] : [.sortedKeys]
             if let data = try? encoder.encode(value) { try? data.write(to: url, options: .atomic) }
         }
     }

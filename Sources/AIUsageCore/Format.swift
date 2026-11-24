@@ -35,6 +35,17 @@ public enum Format {
         return "\(countdown(now, now: date)) ago"
     }
 
+    /// A point in time on a chart axis: "17:10" today, "Tue 17:10" within six days, else "9/1 17:10".
+    public static func stamp(_ date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        let f = DateFormatter()
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = calendar.isDate(date, inSameDayAs: now) ? "HH:mm"
+            : abs(date.timeIntervalSince(now)) < 6 * 86400 ? "EEE HH:mm" : "M/d HH:mm"
+        return f.string(from: date)
+    }
+
     public static func clock(_ date: Date, calendar: Calendar = .current) -> String {
         let f = DateFormatter()
         f.calendar = calendar

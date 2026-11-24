@@ -91,5 +91,6 @@ MiniMax code 1002. The account keeps its last numbers and shows when the next tr
 | `~/Library/Application Support/ai-usage/accounts.json` | added accounts, hidden/renamed/order, menu bar choices |
 | `~/Library/Application Support/ai-usage/snapshots.json` | last numbers per account |
 | `~/Library/Application Support/ai-usage/schedule.json` | next check and rate-limit wait per account |
+| `~/Library/Application Support/ai-usage/history.json` | usage of each window over the last 35 days, for the charts |
 | Keychain `dev.ai-usage.accounts`, `dev.ai-usage.borrowed` | secrets of added accounts, copies of borrowed tokens |
 | Preferences `dev.ai-usage.app` | settings |

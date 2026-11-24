@@ -45,7 +45,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
 1. `LocalDiscovery` finds credentials other tools already have.
 2. `UsageService` (an actor) merges them with accounts added in the app. It owns account state and polling.
 3. `UsageFetcher` (`Providers.swift`) dispatches to a parser/fetcher for each provider. It turns HTTP JSON into a `UsageSnapshot` (5h/7d `UsageWindow`s, extra windows, or a `Balance`, plus Codex's saved `ResetCredits`: the `rate_limit_reset_credits` count, with expiry from `wham/rate-limit-reset-credits`, asked rarely by `UsageService`).
-4. `AppModel` (`@MainActor`) publishes `[AccountStatus]` to the views.
+4. `AppModel` (`@MainActor`) publishes `[AccountStatus]` to the views, and the `UsageHistory` (`UsageHistory.swift`) that `UsageService` records from every successful fetch into `history.json` (`[seconds, percent, reset]` samples per account and window label; equal runs keep only their ends; pruned after 35 days). `WindowHistory.intervals()` splits a window's samples at each reset; `UsageChartView.swift` draws one interval when its bar is clicked in the popover.
 5. `StatusItemController` + `TitleRenderer` draw the menu bar image natively. `PanelView` is the popover. Both draw time-dependent values (time left, pace cursor, data age) against one `Clock`, which ticks each whole minute, on wake/clock changes and when the popover opens; pass its `now` down rather than calling `Date()` in views. `AccountsView.swift` also contains the Accounts and Settings windows and the login sheets.
 
 **Account sources.**
@@ -70,7 +70,7 @@ The CLI source directory is not called `aiusage` because the repo sits on a case
   - An expired or 401 local token becomes `UsageError.expiredLocalToken`.
   - Only managed tokens get refreshed.
   - `testPollingNeverWritesOrRefreshesLocalCredentials` checks that `$HOME` stays byte-for-byte unchanged.
-- **The app writes only to its own state:** `~/Library/Application Support/ai-usage/` (`accounts.json`, `snapshots.json`, `schedule.json`; overridable with `AI_USAGE_HOME`), its own Keychain items (`dev.ai-usage.accounts`, `dev.ai-usage.borrowed`), and its UserDefaults.
+- **The app writes only to its own state:** `~/Library/Application Support/ai-usage/` (`accounts.json`, `snapshots.json`, `schedule.json`, `history.json`; overridable with `AI_USAGE_HOME`), its own Keychain items (`dev.ai-usage.accounts`, `dev.ai-usage.borrowed`), and its UserDefaults.
 - **Keychain access is built to prompt as rarely as possible** (`Keychain.swift`).
   - Each item is attempted once per run, and denials are persisted.
   - A borrowed token is copied into AI Usage's own item.

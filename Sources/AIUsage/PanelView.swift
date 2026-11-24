@@ -16,6 +16,7 @@ struct PanelView: View {
     /// Every tick (each minute, on wake, when the dropdown opens) redraws the time-dependent values.
     @ObservedObject var clock: Clock
     let actions: PanelActions
+    @StateObject private var chart = ChartSelection()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -41,6 +42,7 @@ struct PanelView: View {
                 AccountSection(status: status, now: clock.now, remaining: settings.showRemaining,
                                showName: settings.showAccountNames,
                                refreshing: model.refreshingIDs.contains(status.id),
+                               history: model.history.windows(status.id), chart: chart,
                                inMenuBar: Binding(get: { !model.notInMenuBarIDs.contains(status.id) },
                                                   set: { model.setInMenuBar(status.account, $0) }),
                                hide: { model.setHidden(status.account, true) },
@@ -142,6 +144,9 @@ struct AccountSection: View {
     let remaining: Bool
     let showName: Bool
     let refreshing: Bool
+    /// Recorded usage of this account's windows, by label.
+    let history: [String: WindowHistory]
+    @ObservedObject var chart: ChartSelection
     @Binding var inMenuBar: Bool
     let hide: () -> Void
     let reload: () -> Void
@@ -183,7 +188,16 @@ struct AccountSection: View {
             HStack { Spacer(minLength: 0); controls }
             let labelWidth: CGFloat = windows.contains { $0.label.count > 3 } ? 58 : 20
             ForEach(Array(windows.enumerated()), id: \.offset) { _, w in
-                WindowRow(window: w, now: now, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth)
+                let key = ChartSelection.key(status.id, w.label)
+                // Clicking a bar opens (or closes) the chart of its window's usage right below it.
+                WindowRow(window: w, now: now, muted: state == .unavailable, remaining: remaining, labelWidth: labelWidth,
+                          expanded: chart.key == key)
+                    .contentShape(Rectangle())
+                    .onTapGesture { chart.toggle(key) }
+                if chart.key == key {
+                    UsageChartPanel(history: history[w.label], now: now, remaining: remaining, selection: chart)
+                        .padding(.bottom, 2)
+                }
             }
             let resets = Format.resetCredits(status.snapshot?.resetCredits, now: now)
             if !resets.isEmpty {
@@ -288,6 +302,8 @@ struct WindowRow: View {
     let remaining: Bool
     /// Same for every row of an account, so their bars line up.
     var labelWidth: CGFloat = 20
+    /// Its usage chart is open below it.
+    var expanded = false
 
     var body: some View {
         let shown = window.display(remaining: remaining, now: now)
@@ -301,10 +317,12 @@ struct WindowRow: View {
         // The bar takes all the width between the label and the percent + time-left columns.
         // An untouched window is a plain grey bar: no cursor, no countdown (its clock hasn't started).
         HStack(spacing: 6) {
-            Text(window.label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            Text(window.label).font(.system(size: 11, weight: .medium))
+                .foregroundStyle(expanded ? Color.accentColor : Color.secondary)
                 .lineLimit(1).frame(width: labelWidth, alignment: .leading)
             Meter(value: exhausted ? 100 : shown.percent, onPace: split.onPace, time: shown.time, good: good, ahead: ahead)
-                .help(idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time))
+                .help([idle ? "Not used yet. The window starts with the first request." : timeHelp(shown.time),
+                       expanded ? "Click to close the chart" : "Click for the usage chart"].filter { !$0.isEmpty }.joined(separator: ". "))
             Text(Format.percent(shown.percent)).font(.system(size: 11, weight: .semibold).monospacedDigit())
                 .foregroundStyle(color).frame(width: 34, alignment: .trailing)
             Text(idle ? "" : Format.countdown(window.resetsAt, now: now)).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
